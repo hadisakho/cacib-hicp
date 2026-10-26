@@ -2,4 +2,16 @@
 name = "cacib-hicp"
 version = "0.1.0"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+    "numpy>=2.0.2",
+    "pandas>=2.3.3",
+    "pyarrow>=21.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.31.0",
+    "pytest>=8.4.2",
+    "ruff>=0.17.2",
+]
