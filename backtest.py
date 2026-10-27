@@ -1,4 +1,4 @@
-"""Validation rétrospective de prévisions IPCH à 1, 2 et 3 mois.
+"""Validation rétrospective de prévisions HICP à 1, 2 et 3 mois.
 
 Les 24 derniers mois de cibles restent réservés au test final.
 L'origine désigne le dernier mois observé, pas une date historique de publication.

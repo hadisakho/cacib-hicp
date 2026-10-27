@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: cacib-inflation-lab
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install --no-cache-dir -r requirements-lab.txt
+    startCommand: gunicorn cacib_lab.app:server --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 60
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.15
+      - key: CACIB_BUNDLE_PATH
+        value: deploy/dashboard.json
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"

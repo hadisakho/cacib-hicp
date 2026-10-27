@@ -1,17 +1,27 @@
 [project]
 name = "cacib-hicp"
 version = "0.1.0"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
-    "httpx>=0.28.1",
-    "numpy>=2.0.2",
-    "pandas>=2.3.3",
-    "pyarrow>=21.0.0",
+    "dash==3.4.0",
+    "dash-mantine-components==2.8.1",
+    "gunicorn==26.2.0",
+    "httpx==0.28.1",
+    "matplotlib==3.10.8",
+    "numpy==2.3.5",
+    "pandas==2.2.3",
+    "plotly==6.9.0",
+    "pyarrow==26.0.0",
+    "scikit-learn==1.8.0",
+    "statsmodels==0.15.0",
 ]
 
 [dependency-groups]
 dev = [
     "ipykernel>=6.31.0",
+    "jupyterlab>=4.6.4",
+    "nbclient>=0.11.0",
+    "nbformat>=5.11.1",
     "pytest>=8.4.2",
     "ruff>=0.17.2",
 ]

@@ -1,0 +1,9 @@
+model,benchmark,targets,mean_squared_loss_difference,ci95_low,ci95_high,block_months,interpretation
+branches__ets_additive,direct__ets_additive,129,0.0323704107073658,-0.09050024409197255,0.21054991112842394,6,negative_favors_candidate
+countries__seasonal_mean,direct__ets_additive,129,0.2060172197875656,-0.12264689308659273,0.6638578892252476,6,negative_favors_candidate
+direct__ets_additive,direct__ets_additive,129,0.0,0.0,0.0,6,negative_favors_candidate
+direct__flat_yoy,direct__ets_additive,129,0.36964139751803343,0.08097295757501076,0.761330734740891,6,negative_favors_candidate
+direct__ridge,direct__ets_additive,129,0.24390338263304,0.051006169967732766,0.48201361320913966,6,negative_favors_candidate
+direct__ridge_ppi,direct__ets_additive,129,0.10266708090334659,-0.21045905353614197,0.4023073346106257,6,negative_favors_candidate
+direct__seasonal_mean,direct__ets_additive,129,0.21555260903084333,-0.11555041705692512,0.6739897037078849,6,negative_favors_candidate
+ensemble__ets_branches,direct__ets_additive,129,-0.0055652922684035,-0.061406087249762965,0.07226959994269797,6,negative_favors_candidate

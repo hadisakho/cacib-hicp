@@ -1,0 +1,48 @@
+{
+  "model": "ensemble__ets_branches",
+  "window": 120,
+  "criterion": "minimum_validation_RMSE_h3",
+  "validation_run": "runs/validation_20261027T063217_938870Z",
+  "validation_signature": "70d07df3dc34a51fbfac03428dea196cc6a1edb66f2dd8253cfc3420973c2639",
+  "inputs": "857d7f099b9751bed969abe424c8de8b490a24495ba9b51e790c2d4c0e02afad",
+  "numerics": {
+    "code": {
+      "data.py": "60e859661e337b1005c644b6e937ea1c21f2438562df6a80aa9b2f1440210811",
+      "models.py": "c3d18ae49f0642a0ead1ef89b9767ee5ea503dbe3d31c4d8bb6c76d2f1d847e5",
+      "hierarchy.py": "17f113a5aba58f053e6f989aef6e9f1e686afa337f7d36cd638cebd9b5ee222b",
+      "evaluation.py": "cad9e8b6c582ece1cf118891e546eec912732429fd38f9ae105b2f4e68dd6a93",
+      "uncertainty.py": "bbdbcea4c7e650975475f4a692c60733b9f6f9af28649bd9ac5d883b8bea3a90",
+      "workflow.py": "55167dc4c3571da12a7bd220bb3548d10922a74b103094d80bfb3d7f18147742",
+      "baselines.py": "3106fd1dc848e46d25156be758bf69c12061eaf2074f8fbaded3e448f461aebf",
+      "forecast_models.py": "10b0b70b6378bb2cf0ee96e214b8ab9a64fa0da1bc10b67558e9b4a898669a45",
+      "ridge_model.py": "8de74da1b4053b8ea4d2f80dc690a92bcb73f3ccfe8aa6a211843e73103a9cdb"
+    },
+    "versions": {
+      "numpy": "2.3.5",
+      "pandas": "2.2.3",
+      "scikit-learn": "1.8.0",
+      "statsmodels": "0.15.0",
+      "pyarrow": "26.0.0"
+    }
+  },
+  "protocol": {
+    "validation_start": "2014-01",
+    "validation_end": "2024-09",
+    "test_start": "2024-10",
+    "test_end": "2026-09",
+    "as_of": "2026-09",
+    "horizon": 3,
+    "min_train": 120,
+    "seed": 1729,
+    "min_calibration": 36,
+    "interval_draws": 2000,
+    "ppi_lag": 2
+  },
+  "final_models": [
+    "ensemble__ets_branches",
+    "direct__flat_yoy",
+    "direct__ets_additive"
+  ],
+  "refit_rule": "rolling_refit_using_only_observations_through_origin",
+  "calibration_rule": "joint_matured_errors_update_without_parameter_selection"
+}

@@ -1,0 +1,20 @@
+{
+  "legacy_unit_tests": 40,
+  "new_unit_and_http_tests": 42,
+  "unit_test_failures": 0,
+  "validation_forecasts_expanding": 3096,
+  "validation_forecasts_120months": 3096,
+  "final_test_forecasts": 216,
+  "forecast_failures": 0,
+  "notebook_code_cells_verified": {
+    "02_model_comparison.ipynb": 8,
+    "03_scenarios.ipynb": 7
+  },
+  "notebook_verification_runner": "IPython in-process; network kernels unavailable",
+  "dashboard_verified": "Flask HTTP routes, Dash callbacks, CSV export, real bundle scenarios",
+  "browser_visual_qa": "not_verified: managed preview lacks Python project dependencies",
+  "render_deployment": "configuration_supplied_not_deployed",
+  "docker_build": "Dockerfile supplied; docker executable unavailable",
+  "selection_source": "validation_only_120_month_window",
+  "held_out_test_used_for_reselection": false
+}
