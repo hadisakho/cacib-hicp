@@ -1,0 +1,13 @@
+{
+  "source": "Eurostat API",
+  "data_vintage": "2026-10-27T20:05:57+00:00",
+  "last_month": "2026-09",
+  "recommended": "4-model average (recommended)",
+  "members": [
+    "ETS headline",
+    "ETS bottom-up",
+    "Seasonal ARX bottom-up",
+    "Seasonal median bottom-up"
+  ],
+  "run_at": "2026-10-27T20:07:38+00:00"
+}

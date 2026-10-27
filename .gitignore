@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.vscode/
+.DS_Store
+.ipynb_checkpoints/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# raw API responses are re-downloaded by the pipeline
+data/raw/*
+!data/raw/.gitkeep
+# data/processed/ and outputs/ ARE committed: the hosted dashboard reads them

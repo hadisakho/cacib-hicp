@@ -1,0 +1,81 @@
+# Pipeline configuration. Paths are relative to this file.
+data_dir: data
+output_dir: outputs
+
+eurostat:
+  base_url: https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data
+  datasets:
+    index: prc_hicp_minr          # HICP (ECOICOP ver.2) - monthly indices and rates of change
+    item_weights: prc_hicp_iw     # HICP (ECOICOP ver.2) - item weights, per mille
+    country_weights: prc_hicp_cw  # HICP (ECOICOP ver.2) - country weights, per mille
+  index_unit: I25                 # index, 2025 = 100
+  item_weight_filter: {statinfo: IW}
+  country_weight_filter: {statinfo: COWEA}   # euro area with evolving composition
+  since: "1996-01"
+
+# Euro area with evolving composition (EA11-1999 ... EA21-2026) is geo "EA".
+area: EA
+countries: [AT, BE, BG, CY, DE, EE, EL, ES, FI, FR, HR, IE, IT, LT, LU, LV, MT, NL, PT, SI, SK]
+
+codes:
+  headline: TOTAL
+  core: TOT_X_NRG_FOOD            # overall index excluding energy, food, alcohol and tobacco
+  hicpxt: TOT_X_TBC               # overall index excluding tobacco (inflation-linked swaps)
+  fuels: FUEL                     # liquid fuels and fuels for personal transport (sizes the oil shock)
+
+# Two partitions of the headline (weights sum to 1000 in every country and year):
+# main aggregates - used for the forecast and for shocks with indirect energy effects
+components:
+  SERV: Services
+  NRG: Energy
+  FOOD_P: Processed food, alcohol & tobacco
+  FOOD_NP: Unprocessed food
+  IGD_NNRG: Non-energy industrial goods
+energy: NRG
+# COICOP ver.2 divisions - used for contributions and shocks (direct effects)
+divisions:
+  CP01: Food & non-alcoholic beverages
+  CP02: Alcohol, tobacco & narcotics
+  CP03: Clothing & footwear
+  CP04: Housing, water, electricity, gas & fuels
+  CP05: Furnishings & household equipment
+  CP06: Health
+  CP07: Transport
+  CP08: Information & communication
+  CP09: Recreation, sport & culture
+  CP10: Education
+  CP11: Restaurants & accommodation
+  CP12: Insurance & financial services
+  CP13: Personal care, social protection & other
+
+forecast:
+  horizon: 3
+  backtest_start: "2012-12"       # first forecast origin of the out-of-sample evaluation
+  window: 120                     # rolling estimation window (months) of ETS and seasonal ARX
+  seasonal_years: 6               # window of the seasonal-median model
+
+# Evaluation windows (targets). The validation/test split of the original protocol is kept.
+evaluation:
+  full: ["2013-01", null]
+  validation: ["2014-01", "2024-09"]
+  test: ["2024-10", "2026-09"]
+  calm 2013-19: ["2013-01", "2019-12"]
+  surge 2020-23: ["2020-01", "2023-12"]
+
+passthrough:
+  horizons: 24
+  lags: 12
+  sample: ["1997-01", "2020-12"]  # excludes the 2021-23 surge, which inflates the estimates
+
+# External market data for the oil-shock preset (FRED, no API key)
+market:
+  brent: DCOILBRENTEU             # Brent, USD per barrel, daily
+  usd_per_eur: DEXUSEU            # USD per EUR, daily
+
+shocks:
+  horizon: 24
+  # Pump-price structure per litre (approximate euro area averages, editable in the dashboard;
+  # source: EC Weekly Oil Bulletin tax breakdown). Elasticity = crude / (crude + excise + margin).
+  excise_eur_per_litre: 0.60
+  margin_eur_per_litre: 0.25
+  fuels_share_fallback: 0.447     # used only if the FUEL weight is unavailable

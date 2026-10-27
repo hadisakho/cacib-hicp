@@ -1,0 +1,27 @@
+name: Monthly data refresh
+
+# Eurostat publishes the full HICP release around mid-month; refresh on the 20th.
+on:
+  schedule:
+    - cron: "0 12 20 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run pytest -q
+      - run: uv run python -m hicp.pipeline --refresh
+      - name: Commit refreshed data and outputs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/processed outputs
+          git commit -m "Monthly HICP refresh" || echo "No changes"
+          git push

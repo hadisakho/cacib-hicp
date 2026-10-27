@@ -1,0 +1,7 @@
+model,h,level,scaled,coverage,n
+4-model average (recommended),1,0.8,False,0.7596899224806202,129
+4-model average (recommended),1,0.8,True,0.813953488372093,129
+4-model average (recommended),2,0.8,False,0.7165354330708661,127
+4-model average (recommended),2,0.8,True,0.7795275590551181,127
+4-model average (recommended),3,0.8,False,0.664,125
+4-model average (recommended),3,0.8,True,0.76,125

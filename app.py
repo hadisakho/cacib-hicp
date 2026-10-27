@@ -1,0 +1,280 @@
+"""Euro area inflation dashboard.
+
+    streamlit run app.py
+
+Reads data/processed/ and outputs/ (written by `python -m hicp.pipeline`); only the shock
+simulator computes live.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+
+from hicp import plots
+from hicp.aggregation import contributions, effective_weights, yoy
+from hicp.config import load_config
+from hicp.data import load
+from hicp.forecast import BENCHMARKS, NO_CHANGE, RECOMMENDED, base_effect_decomposition
+from hicp.shocks import Shock, fuel_price_elasticity, simulate
+
+st.set_page_config(page_title="Euro area inflation", page_icon="📈", layout="wide")
+OUTPUTS = ["forecast.csv", "backtest.csv", "accuracy.csv", "spa.csv", "coverage.csv", "checks.csv",
+           "passthrough.csv", "passthrough_ratio.csv", "metadata.json"]
+FLAGS = {"p": "provisional", "e": "estimated", "d": "definition differs", "b": "break in series",
+         "u": "low reliability", "c": "confidential", "s": "Eurostat estimate", "f": "forecast"}
+AGGREGATES, DIVISIONS = "Main aggregates", "COICOP ver.2 divisions"
+
+
+def show(fig, where=st) -> None:
+    """Render a chart with the project style (set explicitly: Streamlit overrides template values)."""
+    fig.update_layout(paper_bgcolor=plots.SURFACE, plot_bgcolor=plots.SURFACE,
+                      font=dict(family=plots.FONT, color=plots.INK))
+    where.plotly_chart(fig, width="stretch", theme=None, config={"displaylogo": False})
+
+
+@st.cache_resource
+def load_everything():
+    cfg = load_config(Path(__file__).parent / "config.yaml")
+    out = cfg.output_dir
+    missing = [f for f in OUTPUTS if not (out / f).exists()]
+    if missing or not (cfg.processed_dir / "metadata.json").exists():
+        return None
+    data = load(cfg)
+    bt = pd.read_csv(out / "backtest.csv")
+    for c in ("origin", "target"):
+        bt[c] = pd.PeriodIndex(bt[c], freq="M")
+    lp = pd.read_csv(out / "passthrough.csv")
+    read_json = lambda f: json.loads((out / f).read_text()) if (out / f).exists() else {}  # noqa: E731
+    return {
+        "cfg": cfg, "data": data, "bt": bt,
+        "forecast": pd.read_csv(out / "forecast.csv"), "accuracy": pd.read_csv(out / "accuracy.csv"),
+        "spa": pd.read_csv(out / "spa.csv"), "coverage": pd.read_csv(out / "coverage.csv"),
+        "checks": pd.read_csv(out / "checks.csv"),
+        "quality": pd.read_csv(out / "data_quality.csv") if (out / "data_quality.csv").exists() else None,
+        "ratio": pd.read_csv(out / "passthrough_ratio.csv", index_col=0),
+        "lp": {c: g.set_index("h") for c, g in lp.groupby("component")},
+        "meta": read_json("metadata.json"), "market": read_json("market.json"),
+        "contrib": {name: contributions(data.area_breakdown(codes), data.area_weights(codes))
+                    for name, codes in breakdowns(cfg).items()},
+    }
+
+
+def breakdowns(cfg) -> dict[str, list[str]]:
+    return {AGGREGATES: cfg.components, **({DIVISIONS: cfg.divisions} if cfg.divisions else {})}
+
+
+@st.cache_data(show_spinner="Simulating...")
+def run_shocks(specs: tuple, breakdown: str, indirect: bool, horizon: int):
+    R = load_everything()
+    cfg = R["cfg"]
+    return simulate(R["data"], [Shock(*s) for s in specs], horizon=horizon, energy=cfg.energy,
+                    passthrough_ratio=R["ratio"] if indirect else None, codes=breakdowns(cfg)[breakdown])
+
+
+R = load_everything()
+if R is None:
+    st.title("Euro area inflation")
+    st.error("No results yet. Run the pipeline first: `uv run python -m hicp.pipeline` "
+             "(downloads from the Eurostat API and writes data/processed/ and outputs/).")
+    st.stop()
+
+cfg, data, fc = R["cfg"], R["data"], R["forecast"]
+labels = {**data.labels, plots.OTHER: "Other divisions"}
+head, T = data.headline(), data.last_month
+rate = yoy(head)
+fc_targets = pd.PeriodIndex(fc["target"], freq="M")
+fc_yoy = pd.Series(fc[RECOMMENDED].to_numpy(), index=fc_targets)
+largest_divisions = list(data.area_weights(data.divisions).iloc[-1].sort_values(ascending=False).index[:7]) \
+    if data.divisions else []
+
+st.title("Euro area inflation")
+st.caption(f"HICP, euro area (evolving composition EA11-1999 … EA21-2026), ECOICOP ver.2, index 2025 = 100 · "
+           f"data to {T.strftime('%B %Y')} · source: {R['meta'].get('source', 'Eurostat API')} · "
+           f"updated {R['meta'].get('run_at', '')[:10]}")
+
+tab_over, tab_fc, tab_shock, tab_method = st.tabs(["Overview", "Forecast", "Shock simulator", "Method & data"])
+
+# ---- Overview -----------------------------------------------------------------------
+with tab_over:
+    contrib_agg = R["contrib"][AGGREGATES]
+    c = st.columns(4)
+    c[0].metric(f"Headline, {T.strftime('%b %Y')}", f"{rate.loc[T]:.1f}%",
+                f"{rate.loc[T] - rate.loc[T - 1]:+.1f} pp vs previous month", delta_color="off")
+    core = data.series(data.area, data.codes["core"]) if "core" in data.codes else None
+    if core is not None:
+        core_rate = yoy(core)
+        c[1].metric("Core (ex. energy, food, alcohol, tobacco)", f"{core_rate.loc[T]:.1f}%",
+                    f"{core_rate.loc[T] - core_rate.loc[T - 1]:+.1f} pp", delta_color="off")
+    last = fc.iloc[-1]
+    c[2].metric(f"Forecast, {fc_targets[-1].strftime('%b %Y')}", f"{last[RECOMMENDED]:.1f}%",
+                f"80% range {last[RECOMMENDED] + last['lo80']:.1f}–{last[RECOMMENDED] + last['hi80']:.1f}%",
+                delta_color="off")
+    c[3].metric("Energy contribution", f"{contrib_agg.loc[T, cfg.energy]:+.2f} pp",
+                f"{contrib_agg.loc[T, cfg.energy] - contrib_agg.loc[T - 12, cfg.energy]:+.2f} pp over 12 months",
+                delta_color="off")
+
+    show(plots.headline_chart(head, core))
+    view = st.segmented_control("Breakdown", list(R["contrib"]), default=AGGREGATES, key="contrib_view")
+    contrib = R["contrib"][view or AGGREGATES]
+    if (view or AGGREGATES) == DIVISIONS:
+        contrib = plots.keep_and_other(contrib, largest_divisions)
+    show(plots.contributions_chart(contrib, head, labels))
+    show(plots.country_heatmap(data))
+
+# ---- Forecast -----------------------------------------------------------------------
+with tab_fc:
+    bands = fc.set_index("h")[[c for c in fc.columns if c[:2] in ("lo", "hi")]]
+    show(plots.fan_chart(head, fc_yoy, bands))
+
+    implied = pd.concat([head, pd.Series(head.reindex(fc_targets - 12).to_numpy() * (1 + fc_yoy.to_numpy() / 100),
+                                         index=fc_targets)])
+    left, right = st.columns([3, 2])
+    show(plots.base_effects_chart(base_effect_decomposition(implied, T, len(fc_targets))), left)
+    with right:
+        st.markdown("**Forecasts by model** (headline YoY, %)")
+        models = fc.set_index("target")[[c for c in fc.columns if c not in ("target", "h") and c[:2] not in ("lo", "hi")]]
+        st.dataframe(models.T.round(2), width="stretch")
+        st.caption("The recommended model is the equal-weight average of the four models above it. Intervals: "
+                   "empirical quantiles of past out-of-sample errors, widened when recent errors are larger than usual.")
+
+    st.subheader("Does it beat a naive forecast?")
+    acc = R["accuracy"]
+    window = st.segmented_control("Evaluation window", list(cfg.windows), default=next(iter(cfg.windows)))
+    table = acc[acc["window"] == (window or next(iter(cfg.windows)))].drop(columns="window")
+    show(plots.accuracy_chart(table, RECOMMENDED, BENCHMARKS))
+    st.dataframe(table.set_index("model").round(3), width="stretch")
+    with st.expander("Overfitting and interval checks"):
+        spa = R["spa"].set_index("window")["spa_p_value"]
+        st.markdown(
+            "- **Data snooping (Hansen SPA test):** probability that *no* candidate beats the no-change forecast, "
+            "allowing for having searched over all of them: " + ", ".join(f"{w} p = {p:.2f}" for w, p in spa.items()) + ".\n"
+            "- **Real-time 80% interval coverage** (target 0.80): "
+            + ", ".join(f"h={int(r.h)} {'scaled' if r.scaled else 'plain'} {r.coverage:.2f}" for r in R["coverage"].itertuples())
+            + f".\n- Every model is re-estimated each month on the previous {cfg['forecast']['window']} months only; "
+            "the combination has no estimated weights.")
+    show(plots.track_record_chart(R["bt"], head, [RECOMMENDED, NO_CHANGE]))
+
+# ---- Shock simulator ----------------------------------------------------------------
+with tab_shock:
+    months = [str(T + k) for k in range(1, 13)]
+    presets = ["Oil price shock (fuels channel)", "German services +3% (wage settlement)",
+               "Gas & electricity spike in DE and IT", "Transport +10% in France (COICOP CP07)", "Custom"]
+    controls, results = st.columns([1, 2.6], gap="large")
+    with controls:
+        preset = st.selectbox("Scenario", presets)
+        specs: list[tuple] = []
+        breakdown, indirect = AGGREGATES, True
+        if preset == presets[0]:
+            m = R["market"]
+            move = st.slider("Brent price change (%)", -50, 100, 30, 5)
+            with st.expander("Pass-through assumptions"):
+                brent = st.number_input("Brent before the shock ($/bbl)", value=float(m.get("brent_usd", 80.0)))
+                fx = st.number_input("USD per EUR", value=float(m.get("usd_per_eur", 1.10)), format="%.4f")
+                excise = st.number_input("Excise (€/litre)", value=float(cfg["shocks"]["excise_eur_per_litre"]))
+                margin = st.number_input("Refining & distribution margin (€/litre)",
+                                         value=float(cfg["shocks"]["margin_eur_per_litre"]))
+            eps = fuel_price_elasticity(brent, fx, excise, margin)
+            share = float(m.get("fuels_share_of_energy", cfg["shocks"]["fuels_share_fallback"]))
+            size = move * eps * share
+            st.caption(f"Brent {brent:.0f} $/bbl and EUR/USD {fx:.3f} ({m.get('source', 'defaults')}, "
+                       f"{m.get('as_of', 'n/a')}). Pump-price elasticity {eps:.2f} → fuels {move * eps:+.1f}% → "
+                       f"energy HICP {size:+.1f}% (fuels = {share:.1%} of energy, {m.get('fuels_share_source', '')}).")
+            specs.append((cfg.energy, size, months[0], None, "ramp", 2, 6))
+        elif preset == presets[1]:
+            specs.append(("SERV", 3.0, months[0], ("DE",), "ramp", 6, 6))
+        elif preset == presets[2]:
+            specs.append((cfg.energy, 15.0, months[0], ("DE", "IT"), "temporary", 1, 6))
+        elif preset == presets[3]:
+            breakdown = DIVISIONS
+            specs.append(("CP07", 10.0, months[0], ("FR",), "step", 1, 6))
+        else:
+            breakdown = st.radio("Breakdown", list(breakdowns(cfg)), horizontal=True,
+                                 help="Main aggregates include indirect effects of energy shocks; COICOP "
+                                      "divisions are direct effects only.")
+            names = {labels.get(k, k): k for k in breakdowns(cfg)[breakdown]}
+            chosen = st.multiselect("Components (one or more)", list(names), default=list(names)[:1])
+            countries = st.multiselect("Countries (empty = whole euro area)", data.countries)
+            size = st.number_input("Price level change (%)", value=10.0, step=1.0)
+            shape = st.selectbox("Shape", ["step", "ramp", "temporary", "rate"],
+                                 help="step: permanent level shift · ramp: phased in · temporary: reverses · "
+                                      "rate: adds to the component's annual inflation")
+            start = st.selectbox("Start", months)
+            ramp = st.number_input("Ramp length (months)", 1, 24, 6) if shape == "ramp" else 6
+            duration = st.number_input("Duration (months)", 1, 24, 6) if shape == "temporary" else 6
+            specs += [(names[n], float(size), start, tuple(countries) or None, shape, int(ramp), int(duration))
+                      for n in chosen]
+        if breakdown == AGGREGATES:
+            indirect = st.toggle("Include indirect effects (energy → food, goods, services)", value=True)
+        st.caption("Rule of thumb: a permanent x% rise on a basket share ω adds ≈ ω·x pp to headline "
+                   "inflation for 12 months, then drops out.")
+
+    with results:
+        if not specs:
+            st.info("Choose at least one component.")
+        else:
+            res = run_shocks(tuple(specs), breakdown, indirect, cfg["shocks"]["horizon"])
+            show(plots.shock_chart(res, labels, preset))
+            show(plots.shock_country_chart(res))
+            table = pd.concat([res.yoy, res.delta.add_prefix("impact ")], axis=1)
+            table.index = table.index.astype(str)
+            st.download_button("Download scenario (CSV)", table.round(4).to_csv(), "scenario.csv", "text/csv")
+    st.caption("Assumptions: weights after the last published year held fixed; indirect pass-through from local "
+               "projections estimated on 1997–2020, identical across countries; no second-round (wage) effects. "
+               "Baseline: usual seasonal pattern with each series' recent momentum.")
+
+# ---- Method & data ------------------------------------------------------------------
+with tab_method:
+    st.subheader("Data checks")
+    st.caption("The aggregation engine reproduces Eurostat's published numbers for both breakdowns.")
+    st.dataframe(R["checks"].fillna("").set_index(["group", "check"]).round(4), width="stretch")
+
+    st.subheader("Data cleaning and quality")
+    flags = data.flags
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Cleaning rules**: exact duplicates dropped; conflicting duplicates stop the pipeline; "
+                    "non-positive or non-finite index values removed; negative weights stop the pipeline; "
+                    "nothing is interpolated.")
+        st.dataframe(pd.Series(data.cleaning, name="count").to_frame(), width="stretch")
+    with right:
+        if flags is not None and len(flags):
+            counts = flags["flag"].value_counts().rename(index=lambda f: f"{f} ({FLAGS.get(f, '?')})")
+            st.markdown("**Eurostat status flags** (kept and reported, not used to drop data)")
+            st.dataframe(counts.rename("observations").to_frame(), width="stretch")
+            recent = flags[flags["time"] >= T - 11]
+            st.caption(f"In the last 12 months: {len(recent)} flagged observations "
+                       f"({', '.join(f'{k}: {v}' for k, v in recent['flag'].value_counts().items()) or 'none'}).")
+    if R["quality"] is not None:
+        with st.expander("Per-series coverage (first/last month, gaps, values removed, flags)"):
+            st.dataframe(R["quality"], width="stretch", hide_index=True)
+
+    omega = effective_weights(data.item_weights, data.country_weights, data.countries, data.components)
+    year = int(omega.index[-1])
+    show(plots.weights_chart(omega.loc[year], labels, year))
+    show(plots.passthrough_chart(R["lp"], labels, data.components, energy=cfg.energy))
+    es = cfg["eurostat"]["datasets"]
+    st.subheader("Method")
+    st.markdown(f"""
+- **Data.** Eurostat dissemination API: `{es['index']}` (monthly indices, unit I25),
+  `{es['item_weights']}` (item weights), `{es['country_weights']}` (country weights, euro area with
+  evolving composition). Headline, 5 main aggregates, 13 COICOP ver.2 divisions, core and HICPxT for the
+  euro area and 21 countries.
+- **Aggregation.** HICP is chain-linked every year with a December overlap. Exact contributions (Ribe)
+  add up to the published rate; the euro area is rebuilt from 21 countries with weights = country
+  weight × item weight, for both breakdowns.
+- **Forecast.** Headline YoY in 3 months = today's rate + 3 new monthly changes − 3 known base
+  effects. Recommended model: equal-weight average of ETS on the headline, ETS on each main aggregate,
+  a seasonal ARX on each and a seasonal median on each, re-estimated every month on the last
+  {cfg['forecast']['window']} months.
+- **Evaluation.** Every forecast uses only data available at its origin. Diebold-Mariano tests
+  (HLN correction), Hansen SPA test for data snooping, real-time interval coverage, sensitivity to settings.
+- **Shocks.** Price-level shocks on any main aggregate or COICOP division, any countries; exact
+  re-aggregation; indirect energy effects from local projections; oil shocks sized with Brent and EUR/USD
+  (FRED), the fuels weight (Eurostat) and the pump-price tax structure.
+- **Limits.** Univariate forecast: no energy futures or flash estimate. Gains over the no-change
+  forecast are concentrated in volatile periods and borderline significant.
+""")

@@ -1,0 +1,8 @@
+{
+  "brent_usd": 122.03,
+  "usd_per_eur": 1.1278,
+  "as_of": "2026-10-20",
+  "source": "FRED DCOILBRENTEU, DEXUSEU (30-day averages)",
+  "fuels_share_of_energy": 0.447,
+  "fuels_share_source": "Eurostat item weights 2026 (FUEL / NRG)"
+}
