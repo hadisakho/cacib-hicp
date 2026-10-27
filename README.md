@@ -148,5 +148,5 @@ The COICOP dimension is `coicop18`. Every raw response is cached with its downlo
 
 ## Refresh and deployment
 
-- **Monthly refresh.** `.github/workflows/refresh.yml` re-runs the pipeline on the 20th of each month and commits `data/processed/` and `outputs/`. It needs *Settings → Actions → General → Workflow permissions → Read and write*.
-- **Hosting.** On [Streamlit Community Cloud](https://share.streamlit.io): *Create app*, then this repository, branch `main`, file `app.py`. The dependencies come from `requirements.txt`, which you regenerate with `uv export --no-hashes --no-dev --no-emit-project -o requirements.txt`.
+- **Monthly refresh** `.github/workflows/refresh.yml` re-runs the pipeline on the 20th of each month and commits `data/processed/` and `outputs/`. It needs *Settings → Actions → General → Workflow permissions → Read and write*.
+- **Hosting** On [Streamlit Community Cloud](https://share.streamlit.io): *Create app*, then this repository, branch `main`, file `app.py`. The dependencies come from `requirements.txt`, which you regenerate with `uv export --no-hashes --no-dev --no-emit-project -o requirements.txt`.
