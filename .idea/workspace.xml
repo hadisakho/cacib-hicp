@@ -5,7 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0510dad4-8dee-4a1b-a854-9bd2d7b7ef3f" name="Changes" comment="Adding README.md">
+      <change afterPath="$PROJECT_DIR$/prepare_data.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eurostat_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/eurostat_client.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -70,7 +73,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1793050796114</updated>
-      <workItem from="1793050797126" duration="4918000" />
+      <workItem from="1793050797126" duration="5724000" />
     </task>
     <task id="LOCAL-00001" summary="Adding README.md">
       <option name="closed" value="true" />
@@ -80,7 +83,15 @@
       <option name="project" value="LOCAL" />
       <updated>1793052553296</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Adding README.md">
+      <option name="closed" value="true" />
+      <created>1793067028625</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1793067028625</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

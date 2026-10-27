@@ -1,4 +1,4 @@
-"""Extractions Eurostat."""
+"""Extractions"""
 
 import hashlib
 import json

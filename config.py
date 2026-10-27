@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 
 
 # Horizon
-FORECAST_HORIZON = 3  # Nombre de mois à prévoir
+FORECAST_HORIZON = 3  # Nombre de mois
 
 
 # Période d'extraction
