@@ -54,3 +54,32 @@ if __name__ == "__main__":
 
     for name, dataset in DATASETS.items():
         print(f"{name} : {dataset}")
+
+# Dates d'entrée dans la zone euro.
+# Sélectionner les pays à la date de coupure.
+EURO_AREA_ENTRY = {
+    "AT": "1999-01",
+    "BE": "1999-01",
+    "DE": "1999-01",
+    "ES": "1999-01",
+    "FI": "1999-01",
+    "FR": "1999-01",
+    "IE": "1999-01",
+    "IT": "1999-01",
+    "LU": "1999-01",
+    "NL": "1999-01",
+    "PT": "1999-01",
+    "EL": "2001-01",
+    "SI": "2007-01",
+    "CY": "2008-01",
+    "MT": "2008-01",
+    "SK": "2009-01",
+    "EE": "2011-01",
+    "LV": "2014-01",
+    "LT": "2015-01",
+    "HR": "2023-01",
+    "BG": "2026-01",
+}
+
+ITEM_WEIGHT_STATINFO = "IW"
+COUNTRY_WEIGHT_STATINFO = "COWEA"
