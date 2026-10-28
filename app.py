@@ -164,8 +164,8 @@ with tab_fc:
             + ", ".join(f"{w} {p:.3f}" for w, p in spa.items()) + f". {verdict}.\n"
             "- **Real-time 80% interval coverage** (target 0.80): "
             + ", ".join(f"h={int(r.h)} {'scaled' if r.scaled else 'plain'} {r.coverage:.2f}" for r in R["coverage"].itertuples())
-            + f".\n- Every model is re-estimated each month on the previous {cfg['forecast']['window']} months only; "
-            "the combination has no estimated weights.")
+            + f".\n- ETS and seasonal ARX use rolling windows of {cfg['forecast']['window']} months. The seasonal median model uses six years of observations. "
+            "The combination has no estimated weights.")
         st.markdown("**Model  choice.** The table compares alternative selection rules using only errors observed by each forecast origin:")
         if R["selection"] is not None:
             sel = R["selection"]

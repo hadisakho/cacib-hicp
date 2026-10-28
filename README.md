@@ -137,7 +137,7 @@ The COICOP dimension is `coicop18`. Every raw response is cached with its downlo
 **Forecast.** `π_T+3 = π_T + Σ_k (m_T+k − m_T+k−12)`. The base effects `m_T+k−12` are known, so the models forecast only 3 monthly changes.
 - Component paths are re-aggregated and applied to the published index.
 - For a year whose weights aren't published yet, the previous year's weights are price-updated.
-- Every model is re-estimated each month on the previous 120 months only.
+- ETS and seasonal ARX use rolling windows of 120 months. The seasonal-median model uses six years of observations.
 
 **Evaluation.**
 - Forecast origins run monthly from 2012-12; each forecast uses only data available at its origin (unit-tested).
