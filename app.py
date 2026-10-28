@@ -136,24 +136,23 @@ with tab_over:
 with tab_fc:
     bands = fc.set_index("h")[[c for c in fc.columns if c[:2] in ("lo", "hi")]]
     show(plots.fan_chart(head, fc_yoy, bands))
+    st.caption("The recommended model is the equal-weight average of four models. Intervals: empirical quantiles "
+               "of past out-of-sample errors, widened when recent errors are larger than usual.")
 
     implied = pd.concat([head, pd.Series(head.reindex(fc_targets - 12).to_numpy() * (1 + fc_yoy.to_numpy() / 100),
                                          index=fc_targets)])
-    left, right = st.columns([3, 2])
-    show(plots.base_effects_chart(base_effect_decomposition(implied, T, len(fc_targets))), left)
-    with right:
-        st.markdown("**Forecasts by model** (headline YoY, %)")
+    show(plots.base_effects_chart(base_effect_decomposition(implied, T, len(fc_targets))))
+    with st.expander("Compare model forecasts (headline YoY, %)"):
         models = fc.set_index("target")[[c for c in fc.columns if c not in ("target", "h") and c[:2] not in ("lo", "hi")]]
         st.dataframe(models.T.round(2), width="stretch")
-        st.caption("The recommended model is the equal-weight average of the four models above it. Intervals: "
-                   "empirical quantiles of past out-of-sample errors, widened when recent errors are larger than usual.")
 
     st.subheader("Beats a naive forecast?")
     acc = R["accuracy"]
     window = st.segmented_control("Evaluation window", list(cfg.windows), default=next(iter(cfg.windows)))
     table = acc[acc["window"] == (window or next(iter(cfg.windows)))].drop(columns="window")
     show(plots.accuracy_chart(table, RECOMMENDED, BENCHMARKS))
-    st.dataframe(table.set_index("model").round(3), width="stretch")
+    with st.expander("Full accuracy table (n, RMSE, MAE, bias, Diebold-Mariano test)"):
+        st.dataframe(table.set_index("model").round(3), width="stretch")
     with st.expander("Overfitting and forecast uncertainty"):
         spa = R["spa"].set_index("window")["spa_p_value"]
         at5, at10 = [w for w, p in spa.items() if p < 0.05], [w for w, p in spa.items() if 0.05 <= p < 0.10]
@@ -272,34 +271,33 @@ with tab_shock:
             table = pd.concat([res.yoy, res.delta.add_prefix("impact ")], axis=1)
             table.index = table.index.astype(str)
             st.download_button("Download scenario (CSV)", table.round(4).to_csv(), "scenario.csv", "text/csv")
-    st.caption(f"The baseline matches the central forecast for the first three months. Beyond that, it continues each series seasonal pattern and recent momentum as a conditional path. Future weights are held fixed, and no wage feedback is modelled")
+    st.caption("The baseline matches the central forecast for the first three months. Beyond that, it continues each series seasonal pattern and recent momentum as a conditional path. Future weights are held fixed, and no wage feedback is modelled")
 
 # ---- Method & data ------------------------------------------------------------------
 with tab_method:
     st.subheader("Data checks")
     st.caption("The aggregation engine reproduces Eurostat's published numbers for both breakdowns.")
     checks = R["checks"]
-    blank_text = {c: "" for c in checks.columns if checks[c].dtype == object}  # numbers stay numeric
+    blank_text = {c: "" for c in checks.select_dtypes(exclude="number").columns}  # numbers stay numeric
     st.dataframe(checks.fillna(blank_text).set_index(["group", "check"]).round(4), width="stretch")
 
     st.subheader("Data cleaning and quality")
     flags = data.flags
-    left, right = st.columns(2)
-    with left:
-        st.markdown("**Cleaning rules**: exact duplicates dropped; conflicting duplicates stop the pipeline; "
-                    "non-positive or non-finite index values removed; negative weights stop the pipeline; "
-                    "nothing is interpolated.")
-        st.dataframe(pd.Series(data.cleaning, name="count").to_frame(), width="stretch")
-    with right:
+    st.markdown("**Cleaning rules**: exact duplicates dropped; conflicting duplicates stop the pipeline; "
+                "non-positive or non-finite index values removed; negative weights stop the pipeline; "
+                "nothing is interpolated. The counts are in the *Cleaning* rows of the checks above.")
+    if flags is not None and len(flags):
+        recent = flags[flags["time"] >= T - 11]
+        st.caption(f"Eurostat status flags are kept and reported, not used to drop data. In the last 12 months: "
+                   f"{len(recent)} flagged observations "
+                   f"({', '.join(f'{k}: {v}' for k, v in recent['flag'].value_counts().items()) or 'none'}).")
+    with st.expander("Data quality details (Eurostat flags, per-series coverage)"):
         if flags is not None and len(flags):
             counts = flags["flag"].value_counts().rename(index=lambda f: f"{f} ({FLAGS.get(f, '?')})")
-            st.markdown("**Eurostat status flags** (kept and reported, not used to drop data)")
+            st.markdown("**Eurostat status flags**, all observations")
             st.dataframe(counts.rename("observations").to_frame(), width="stretch")
-            recent = flags[flags["time"] >= T - 11]
-            st.caption(f"In the last 12 months: {len(recent)} flagged observations "
-                       f"({', '.join(f'{k}: {v}' for k, v in recent['flag'].value_counts().items()) or 'none'}).")
-    if R["quality"] is not None:
-        with st.expander("Per-series coverage (first/last month, gaps, values removed, flags)"):
+        if R["quality"] is not None:
+            st.markdown("**Per-series coverage** (first/last month, gaps, values removed, flags)")
             st.dataframe(R["quality"], width="stretch", hide_index=True)
 
     omega = effective_weights(data.item_weights, data.country_weights, data.countries, data.components)

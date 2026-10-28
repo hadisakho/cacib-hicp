@@ -203,16 +203,17 @@ def accuracy_chart(table: pd.DataFrame, highlight: str, benchmarks: list[str]) -
     t = table.sort_values("RMSE", ascending=False)
     colors = [SERIES[0] if m == highlight else MUTED if m in benchmarks else BLUE_RAMP["200"] for m in t["model"]]
     fig = go.Figure(go.Bar(y=t["model"], x=t["RMSE"].round(3), orientation="h", marker_color=colors,
-                           text=[f"{r:.2f} pp" for r in t["RMSE"]], textposition="outside",
+                           text=[f"{r:.2f} pp · {q:.2f}×" for r, q in zip(t["RMSE"], t["rel. RMSE"])],
+                           textposition="outside",
                            customdata=np.c_[t["rel. RMSE"], t["DM p-value"]],
                            hovertemplate="%{y}<br>RMSE %{x:.3f} pp<br>vs no change: %{customdata[0]:.2f}"
                                          "<br>DM p-value %{customdata[1]:.3f}<extra></extra>"))
     row = table.set_index("model").loc[highlight]
-    fig.update_layout(height=60 * len(t) + 140, margin=dict(l=230, b=50), xaxis_range=[0, 1.18 * t["RMSE"].max()],
+    fig.update_layout(height=60 * len(t) + 140, margin=dict(l=230, b=50), xaxis_range=[0, 1.3 * t["RMSE"].max()],
                       title=_title(f"{highlight}: RMSE {row['RMSE']:.2f} pp, "
                                    f"{100 * (1 - row['rel. RMSE']):.0f}% below the no-change forecast",
                                    f"3-month-ahead headline YoY, out-of-sample, {int(row['n'])} forecasts; "
-                                   f"Diebold-Mariano p = {row['DM p-value']:.2f}"))
+                                   f"Diebold-Mariano p = {row['DM p-value']:.2f}; labels: RMSE · ratio to no change"))
     return fig
 
 
