@@ -317,8 +317,8 @@ with tab_method:
   weight × item weight, for both breakdowns.
 - **Forecast.** Headline YoY in 3 months = today's rate + 3 new monthly changes − 3 known base
   effects. Recommended model: equal-weight average of ETS on the headline, ETS on each main aggregate,
-  a seasonal ARX on each and a seasonal median on each, re-estimated every month on the last
-  {cfg['forecast']['window']} months.
+  a seasonal ARX on each and a seasonal median on each. ETS and seasonal ARX use rolling windows of
+  {cfg['forecast']['window']} months. The seasonal median uses the previous six years.
 - **Evaluation.** Every forecast uses only data available at its origin. Diebold-Mariano tests
   (HLN correction), Hansen SPA test for data snooping, real-time interval coverage, sensitivity to settings.
 - **Shocks.** Price-level shocks on any main aggregate or COICOP division, any countries; exact
