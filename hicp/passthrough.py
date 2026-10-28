@@ -28,7 +28,9 @@ def local_projection(y_level: pd.Series, x: pd.Series, horizons: int = 24, lags:
 
     own_lags : include lags of the component's own monthly change (switch off when y is
                the source itself, whose lags are already the x lags)
-    sample   : (first, last) month of the estimation sample, e.g. to exclude 2021-23
+    sample   : (first, last) month of the data used. Both origins t and outcomes t+h stay
+               inside it: at horizon h the last origin is `last - h`, so e.g. ("1997-01",
+               "2020-12") really excludes 2021 onwards at every horizon.
     """
     ly = 100 * np.log(y_level.dropna())
     dy = (ly - lag(ly, 1))
@@ -47,7 +49,7 @@ def local_projection(y_level: pd.Series, x: pd.Series, horizons: int = 24, lags:
         lhs = (lead - lag(ly, 1)).rename("lhs")
         df = pd.concat([lhs, base], axis=1).dropna()
         if sample is not None:
-            df = df.loc[pd.Period(sample[0], freq="M"):pd.Period(sample[1], freq="M")]
+            df = df.loc[pd.Period(sample[0], freq="M"):pd.Period(sample[1], freq="M") - h]
         res = sm.OLS(df["lhs"], sm.add_constant(df.drop(columns="lhs"))) \
             .fit(cov_type="HAC", cov_kwds={"maxlags": h + 1})
         b, se = res.params["x"], res.bse["x"]
@@ -69,3 +71,13 @@ def energy_passthrough(levels: pd.DataFrame, energy: str = "NRG", horizons: int 
     own = out[energy]["beta"]
     out["ratio"] = pd.DataFrame({c: out[c]["beta"] / own for c in levels.columns if c != energy})
     return out
+
+
+def ratio_bands(lp: dict[str, pd.DataFrame], energy: str = "NRG") -> dict[str, pd.DataFrame]:
+    """Pass-through ratios (central, low, high) for the shock engine: each component's
+    response and its 90% band divided by energy's own cumulative response. A sensitivity
+    range on the component coefficients, not a full confidence interval."""
+    own = lp[energy]["beta"]
+    comps = [c for c in lp if c not in (energy, "ratio")]
+    return {name: pd.DataFrame({c: lp[c][col] / own for c in comps})
+            for name, col in (("central", "beta"), ("low", "lo"), ("high", "hi"))}

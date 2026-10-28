@@ -65,7 +65,7 @@ evaluation:
 passthrough:
   horizons: 24
   lags: 12
-  sample: ["1997-01", "2020-12"]  # excludes the 2021-23 surge, which inflates the estimates
+  sample: ["1997-01", "2020-12"]  # origins t AND outcomes t+h in this range: the 2021-23 surge is never used
 
 # External market data for the oil-shock preset (FRED, no API key)
 market:

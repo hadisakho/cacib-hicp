@@ -74,6 +74,7 @@ class ShockResult:
     by_component: pd.DataFrame  # impact by component (pp), direct + indirect
     by_country: pd.DataFrame    # impact by country (pp)
     paths: pd.DataFrame         # price-level deviations applied, (geo, coicop) columns
+    forecast_end: pd.Period | None = None  # last month the baseline equals the central forecast
 
 
 LITRES_PER_BARREL = 158.987
@@ -90,12 +91,17 @@ def fuel_price_elasticity(brent_usd: float, usd_per_eur: float, excise_eur: floa
     return crude / (crude + excise_eur + margin_eur)
 
 
-def baseline(data: HICPData, horizon: int, codes: list[str] | None = None,
-             years: int = 6) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Country x code index levels extended `horizon` months (usual seasonal pattern, each
-    series' last-12-month momentum held), and euro area effective weights extended by
-    holding the last published year fixed. `codes` = a partition of the headline (main
-    aggregates by default, or COICOP divisions)."""
+def baseline(data: HICPData, horizon: int, codes: list[str] | None = None, years: int = 6,
+             anchor: pd.Series | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Country x code index levels extended `horizon` months, and euro area effective
+    weights extended by holding the last published year fixed. `codes` = a partition of
+    the headline (main aggregates by default, or COICOP divisions).
+
+    Path: usual seasonal pattern with each series' last-12-month momentum. With `anchor`
+    (the central forecast of headline YoY, %, for the first months), every series is
+    rescaled proportionally month by month so the aggregate reproduces it exactly: a
+    scenario without shocks then equals the forecast. Months after the anchor are a
+    conditional assumption, not a forecast."""
     codes = codes or data.components
     T = data.last_month
     end = T + horizon
@@ -111,7 +117,13 @@ def baseline(data: HICPData, horizon: int, codes: list[str] | None = None,
     omega = omega.reindex(columns=levels.columns).fillna(0.0)
     for y in range(int(omega.index.max()) + 1, end.year + 1):
         omega.loc[y] = omega.loc[y - 1]
-    return levels, omega.sort_index()
+    omega = omega.sort_index()
+    if anchor is not None:
+        for t, rate in anchor.items():  # in order: a common factor from t onwards keeps relative prices
+            t = pd.Period(t, freq="M")
+            agg = chain_link(levels, omega, rebase_year=None)
+            levels.loc[t:] *= agg.loc[t - 12] * (1 + rate / 100) / agg.loc[t]
+    return levels, omega
 
 
 def indirect_path(source: np.ndarray, ratio: pd.Series) -> np.ndarray:
@@ -129,14 +141,15 @@ def indirect_path(source: np.ndarray, ratio: pd.Series) -> np.ndarray:
 
 def simulate(data: HICPData, shocks: list[Shock], horizon: int = 24,
              passthrough_ratio: pd.DataFrame | None = None, energy: str = "NRG",
-             codes: list[str] | None = None) -> ShockResult:
+             codes: list[str] | None = None, anchor: pd.Series | None = None) -> ShockResult:
     """Apply `shocks` (one or more components and/or countries) and re-aggregate exactly.
     `codes` chooses the partition (default: main aggregates). Indirect effects need the
-    energy aggregate in the partition and a pass-through table."""
+    energy aggregate in the partition and a pass-through table. `anchor`: central forecast
+    (headline YoY by month) that the baseline reproduces over the forecast horizon."""
     codes = codes or data.components
     if unknown := {sh.component for sh in shocks} - set(codes):
         raise ValueError(f"Shocked codes {sorted(unknown)} are not in the chosen breakdown")
-    levels, omega = baseline(data, horizon, codes)
+    levels, omega = baseline(data, horizon, codes, anchor=anchor)
     periods = levels.index
     T = data.last_month
     members = list(dict.fromkeys(levels.columns.get_level_values("geo")))
@@ -177,5 +190,6 @@ def simulate(data: HICPData, shocks: list[Shock], horizon: int = 24,
     by_comp = diff.T.groupby(level="coicop").sum().T.reindex(columns=codes)
     by_country = diff.T.groupby(level="geo").sum().T
     by_country = by_country.loc[:, by_country.abs().max() > 1e-6]
+    end = pd.Period(anchor.index[-1], freq="M") if anchor is not None else None
     return ShockResult(yoy=yoys, delta=delta, by_component=by_comp, by_country=by_country,
-                       paths=total.loc[:, (total != 0).any()])
+                       paths=total.loc[:, (total != 0).any()], forecast_end=end)

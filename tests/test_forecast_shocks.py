@@ -7,7 +7,8 @@ from hicp.config import load_config
 from hicp.eurostat import jsonstat_to_frame
 from hicp.evaluation import dm_test, interval_bands
 from hicp.forecast import (ARX_BOTTOM_UP, ETS_BOTTOM_UP, ETS_HEADLINE, MEMBERS, RECOMMENDED,
-                           ForecastSetup, backtest, base_effect_decomposition, easter_regressor)
+                           ForecastSetup, backtest, base_effect_decomposition, easter_regressor, final_forecast)
+from hicp.passthrough import energy_passthrough, ratio_bands
 from hicp.shocks import Shock, fuel_price_elasticity, simulate
 from hicp.synthetic import make_demo_data
 
@@ -125,3 +126,36 @@ def test_division_and_multi_component_shocks(demo):
 def test_shock_on_code_outside_breakdown_is_rejected(demo):
     with pytest.raises(ValueError):
         simulate(demo, [Shock("CP07", 10, str(demo.last_month + 1))], codes=demo.components)
+
+
+@pytest.mark.parametrize("partition", ["components", "divisions"])
+def test_null_scenario_reproduces_the_central_forecast(setup, demo, partition):
+    """Anchored baseline = recommended forecast over its horizon, for both breakdowns."""
+    fc = final_forecast(setup)["yoy"]
+    codes = getattr(demo, partition)
+    res = simulate(demo, [], horizon=24, codes=codes, anchor=fc)
+    assert np.allclose(res.yoy["baseline"].reindex(fc.index), fc, atol=1e-9)
+    assert res.delta["total"].abs().max() < 1e-12 and res.forecast_end == fc.index[-1]
+    # impacts barely depend on the baseline path
+    shock = [Shock(codes[0], 10, str(demo.last_month + 1))]
+    free = simulate(demo, shock, horizon=24, codes=codes).delta["total"]
+    anchored = simulate(demo, shock, horizon=24, codes=codes, anchor=fc).delta["total"]
+    assert (free - anchored).abs().max() < 0.02
+
+
+def test_passthrough_sample_bounds_origins_and_outcomes(demo):
+    """With sample (a, b), no observation after b is used at any horizon, even through t+h."""
+    levels = demo.area_components()
+    sample = ("2005-01", "2020-12")
+    lp = energy_passthrough(levels, horizons=6, lags=3, sample=sample)
+    noisy = levels.copy()
+    rng = np.random.default_rng(0)
+    after = noisy.index > pd.Period(sample[1], freq="M")
+    noisy.loc[after] *= np.exp(rng.normal(0, 0.02, size=(after.sum(), noisy.shape[1])))
+    lp2 = energy_passthrough(noisy, horizons=6, lags=3, sample=sample)
+    for c in levels.columns:
+        assert np.allclose(lp[c]["beta"], lp2[c]["beta"]) and np.allclose(lp[c]["se"], lp2[c]["se"])
+    n = lp["SERV"]["n"]
+    assert (n.diff().dropna() == -1).all()  # one origin fewer per horizon
+    bands = ratio_bands(lp)
+    assert np.allclose(bands["central"], lp["ratio"][bands["central"].columns])

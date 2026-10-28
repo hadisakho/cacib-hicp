@@ -234,7 +234,7 @@ def track_record_chart(bt: pd.DataFrame, headline: pd.Series, models: list[str],
 # ---- pass-through and shocks -----------------------------------------------------
 
 def passthrough_chart(lp: dict[str, pd.DataFrame], labels: dict[str, str], components: list[str],
-                      energy: str = "NRG") -> go.Figure:
+                      energy: str = "NRG", sample: tuple[str, str] | None = None) -> go.Figure:
     comps = [c for c in components if c != energy and c in lp]
     colors = component_colors(components)
     fig = make_subplots(rows=1, cols=len(comps), subplot_titles=[labels.get(c, c) for c in comps],
@@ -252,7 +252,8 @@ def passthrough_chart(lp: dict[str, pd.DataFrame], labels: dict[str, str], compo
     fig.update_xaxes(title_text="months after the energy price move")
     fig.update_layout(height=420, margin=dict(b=70), title=_title(
         "Energy price moves pass through to other prices with a lag",
-        "Cumulative % response to a 1% rise in the energy HICP (local projections, 90% HAC bands)"))
+        "Cumulative % response to a 1% rise in the energy HICP (local projections"
+        + (f", origins and outcomes in {sample[0][:4]}–{sample[1][:4]}" if sample else "") + ", 90% HAC bands)"))
     return fig
 
 
@@ -269,7 +270,7 @@ def shock_chart(result, labels: dict[str, str], title: str) -> go.Figure:
     colors = fixed or component_colors(list(comp.columns))
     colors[OTHER] = MUTED
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.06)
-    fig.add_scatter(x=x, y=y["baseline"].round(2), name="Baseline (recent momentum)",
+    fig.add_scatter(x=x, y=y["baseline"].round(2), name="Baseline: central forecast, then conditional path",
                     line=dict(color=MUTED, width=2), row=1, col=1)
     fig.add_scatter(x=x, y=y["shocked"].round(2), name="With shock", line=dict(color=INK, width=2), row=1, col=1)
     for c in comp.columns:
@@ -279,10 +280,17 @@ def shock_chart(result, labels: dict[str, str], title: str) -> go.Figure:
         fig.add_bar(x=x, y=vals, name=labels.get(c, c), row=2, col=1,
                     marker=dict(color=colors[c], line=dict(color=SURFACE, width=1)))
     peak = d["total"].abs().idxmax()
+    split = ("Direct effects only (accounting, no estimated coefficient)" if d["indirect"].abs().max() < 1e-9 else
+             f"Direct {d['direct'].loc[peak]:+.2f} pp, indirect (exploratory) {d['indirect'].loc[peak]:+.2f} pp at the peak")
     fig.update_layout(barmode="relative", hovermode="x unified", height=640,
-
-                      title=_title(f"{title}: peak impact {d['total'].loc[peak]:+.2f} pp in {peak.strftime('%b %Y')}",
-                                   f"Direct {d['direct'].loc[peak]:+.2f} pp, indirect {d['indirect'].loc[peak]:+.2f} pp at the peak"))
+                      title=_title(f"{title}: peak impact {d['total'].loc[peak]:+.2f} pp in {peak.strftime('%b %Y')}", split))
+    if result.forecast_end is not None:  # baseline = central forecast up to here, a conditional path after
+        a, b = result.forecast_end.to_timestamp(), (result.forecast_end + 1).to_timestamp()
+        edge = a + (b - a) / 2  # between the last forecast month and the next
+        fig.add_vline(x=edge, line=dict(color=INK_2, width=1, dash="dot"), row="all", col=1)
+        for text, anchor in (("central forecast  ", "right"), ("  conditional path", "left")):
+            fig.add_annotation(x=edge, y=1, xref="x", yref="y domain", text=text, xanchor=anchor, yanchor="bottom",
+                               showarrow=False, font=dict(size=11, color=INK_2))
     fig.update_yaxes(ticksuffix="%", title_text="Headline YoY", row=1, col=1)
     fig.update_yaxes(title_text="Impact, pp", row=2, col=1)
     return _fit_legend(fig)

@@ -19,11 +19,12 @@ from hicp.aggregation import contributions, effective_weights, yoy
 from hicp.config import load_config
 from hicp.data import load
 from hicp.forecast import BENCHMARKS, NO_CHANGE, RECOMMENDED, base_effect_decomposition
+from hicp.passthrough import ratio_bands
 from hicp.shocks import Shock, fuel_price_elasticity, simulate
 
 st.set_page_config(page_title="Euro area inflation", page_icon="📈", layout="wide")
 OUTPUTS = ["forecast.csv", "backtest.csv", "accuracy.csv", "spa.csv", "coverage.csv", "checks.csv",
-           "passthrough.csv", "passthrough_ratio.csv", "metadata.json"]
+           "passthrough.csv", "metadata.json"]
 FLAGS = {"p": "provisional", "e": "estimated", "d": "definition differs", "b": "break in series",
          "u": "low reliability", "c": "confidential", "s": "Eurostat estimate", "f": "forecast"}
 AGGREGATES, DIVISIONS = "Main aggregates", "COICOP ver.2 divisions"
@@ -47,7 +48,8 @@ def load_everything():
     bt = pd.read_csv(out / "backtest.csv")
     for c in ("origin", "target"):
         bt[c] = pd.PeriodIndex(bt[c], freq="M")
-    lp = pd.read_csv(out / "passthrough.csv")
+    lp = {c: g.drop(columns="component").set_index("h")
+          for c, g in pd.read_csv(out / "passthrough.csv").groupby("component")}
     read_json = lambda f: json.loads((out / f).read_text()) if (out / f).exists() else {}  # noqa: E731
     return {
         "cfg": cfg, "data": data, "bt": bt,
@@ -55,8 +57,7 @@ def load_everything():
         "spa": pd.read_csv(out / "spa.csv"), "coverage": pd.read_csv(out / "coverage.csv"),
         "checks": pd.read_csv(out / "checks.csv"),
         "quality": pd.read_csv(out / "data_quality.csv") if (out / "data_quality.csv").exists() else None,
-        "ratio": pd.read_csv(out / "passthrough_ratio.csv", index_col=0),
-        "lp": {c: g.set_index("h") for c, g in lp.groupby("component")},
+        "lp": lp, "ratios": ratio_bands(lp, cfg.energy),  # central / low / high pass-through ratios
         "meta": read_json("metadata.json"), "market": read_json("market.json"),
         "contrib": {name: contributions(data.area_breakdown(codes), data.area_weights(codes))
                     for name, codes in breakdowns(cfg).items()},
@@ -68,11 +69,14 @@ def breakdowns(cfg) -> dict[str, list[str]]:
 
 
 @st.cache_data(show_spinner="Simulating...")
-def run_shocks(specs: tuple, breakdown: str, indirect: bool, horizon: int):
+def run_shocks(specs: tuple, breakdown: str, ratio: str | None, horizon: int, anchor: tuple):
+    """ratio: None (direct effects only) or "central" / "low" / "high" pass-through ratios.
+    anchor: central forecast as ((month, YoY %), ...), reproduced by the baseline."""
     R = load_everything()
     cfg = R["cfg"]
     return simulate(R["data"], [Shock(*s) for s in specs], horizon=horizon, energy=cfg.energy,
-                    passthrough_ratio=R["ratio"] if indirect else None, codes=breakdowns(cfg)[breakdown])
+                    passthrough_ratio=R["ratios"][ratio] if ratio else None, codes=breakdowns(cfg)[breakdown],
+                    anchor=pd.Series(dict(anchor)))
 
 
 R = load_everything()
@@ -167,7 +171,7 @@ with tab_shock:
     with controls:
         preset = st.selectbox("Scenario", presets)
         specs: list[tuple] = []
-        breakdown, indirect = AGGREGATES, True
+        breakdown, indirect = AGGREGATES, False
         if preset == presets[0]:
             m = R["market"]
             move = st.slider("Brent price change (%)", -50, 100, 30, 5)
@@ -193,8 +197,8 @@ with tab_shock:
             specs.append(("CP07", 10.0, months[0], ("FR",), "step", 1, 6))
         else:
             breakdown = st.radio("Breakdown", list(breakdowns(cfg)), horizontal=True,
-                                 help="Main aggregates include indirect effects of energy shocks; COICOP "
-                                      "divisions are direct effects only.")
+                                 help="Main aggregates allow optional indirect effects of energy shocks; "
+                                      "COICOP divisions are direct effects only.")
             names = {labels.get(k, k): k for k in breakdowns(cfg)[breakdown]}
             chosen = st.multiselect("Components (one or more)", list(names), default=list(names)[:1])
             countries = st.multiselect("Countries (empty = whole euro area)", data.countries)
@@ -207,8 +211,12 @@ with tab_shock:
             duration = st.number_input("Duration (months)", 1, 24, 6) if shape == "temporary" else 6
             specs += [(names[n], float(size), start, tuple(countries) or None, shape, int(ramp), int(duration))
                       for n in chosen]
-        if breakdown == AGGREGATES:
-            indirect = st.toggle("Include indirect effects (energy → food, goods, services)", value=True)
+        if breakdown == AGGREGATES and any(spec[0] == cfg.energy for spec in specs):  # energy shocks only
+            indirect = st.toggle("Add indirect effects (exploratory)", value=False,
+                                 help="Energy → food, goods and services, from local projections on "
+                                      f"{'–'.join(m[:4] for m in cfg['passthrough']['sample'])} "
+                                      "(observed energy price changes, not identified shocks; same pass-through "
+                                      "in every country). Shown with a range from the coefficients' 90% bands.")
         st.caption("Rule of thumb: a permanent x% rise on a basket share ω adds ≈ ω·x pp to headline "
                    "inflation for 12 months, then drops out.")
 
@@ -216,21 +224,37 @@ with tab_shock:
         if not specs:
             st.info("Choose at least one component.")
         else:
-            res = run_shocks(tuple(specs), breakdown, indirect, cfg["shocks"]["horizon"])
+            anchor = tuple((str(t), float(v)) for t, v in fc_yoy.items())
+            run = lambda ratio: run_shocks(tuple(specs), breakdown, ratio, cfg["shocks"]["horizon"], anchor)  # noqa: E731
+            res = run("central" if indirect else None)
             show(plots.shock_chart(res, labels, preset))
+            if indirect:
+                peak = res.delta["total"].abs().idxmax()
+                ends = sorted(run(r).delta.loc[peak, "total"] for r in ("low", "high"))
+                direct = res.delta.loc[peak, "direct"]
+                st.caption(f"Sensitivity to the estimated coefficients: with each component's response at the "
+                           f"low or high end of its 90% band, the impact in {peak.strftime('%b %Y')} ranges from "
+                           f"{ends[0]:+.2f} to {ends[1]:+.2f} pp (central {res.delta.loc[peak, 'total']:+.2f} pp, "
+                           f"direct effects alone {direct:+.2f} pp).")
             show(plots.shock_country_chart(res))
             table = pd.concat([res.yoy, res.delta.add_prefix("impact ")], axis=1)
             table.index = table.index.astype(str)
             st.download_button("Download scenario (CSV)", table.round(4).to_csv(), "scenario.csv", "text/csv")
-    st.caption("Assumptions: weights after the last published year held fixed; indirect pass-through from local "
-               "projections estimated on 1997–2020, identical across countries; no second-round (wage) effects. "
-               "Baseline: usual seasonal pattern with each series' recent momentum.")
+    st.caption(f"Baseline: equals the central forecast ({RECOMMENDED.split(' (')[0]}) for "
+               f"{fc_targets[0].strftime('%b')}–{fc_targets[-1].strftime('%b %Y')}, so a scenario without shocks "
+               "reproduces it exactly. After that, each series continues with its usual seasonal pattern and recent "
+               "momentum: a conditional assumption, not a forecast (forecast accuracy is only tested at 1–3 months). "
+               "Impacts (shocked − baseline) barely depend on the baseline. Direct effects are exact accounting; "
+               "indirect effects are optional and exploratory. Weights after the last published year held fixed; "
+               "no second-round (wage) effects.")
 
 # ---- Method & data ------------------------------------------------------------------
 with tab_method:
     st.subheader("Data checks")
     st.caption("The aggregation engine reproduces Eurostat's published numbers for both breakdowns.")
-    st.dataframe(R["checks"].fillna("").set_index(["group", "check"]).round(4), width="stretch")
+    checks = R["checks"]
+    blank_text = {c: "" for c in checks.columns if checks[c].dtype == object}  # numbers stay numeric
+    st.dataframe(checks.fillna(blank_text).set_index(["group", "check"]).round(4), width="stretch")
 
     st.subheader("Data cleaning and quality")
     flags = data.flags
@@ -255,7 +279,8 @@ with tab_method:
     omega = effective_weights(data.item_weights, data.country_weights, data.countries, data.components)
     year = int(omega.index[-1])
     show(plots.weights_chart(omega.loc[year], labels, year))
-    show(plots.passthrough_chart(R["lp"], labels, data.components, energy=cfg.energy))
+    show(plots.passthrough_chart(R["lp"], labels, data.components, energy=cfg.energy,
+                                 sample=tuple(cfg["passthrough"]["sample"])))
     es = cfg["eurostat"]["datasets"]
     st.subheader("Method")
     st.markdown(f"""
@@ -273,8 +298,13 @@ with tab_method:
 - **Evaluation.** Every forecast uses only data available at its origin. Diebold-Mariano tests
   (HLN correction), Hansen SPA test for data snooping, real-time interval coverage, sensitivity to settings.
 - **Shocks.** Price-level shocks on any main aggregate or COICOP division, any countries; exact
-  re-aggregation; indirect energy effects from local projections; oil shocks sized with Brent and EUR/USD
-  (FRED), the fuels weight (Eurostat) and the pump-price tax structure.
+  re-aggregation (direct effects, the default). Oil shocks sized with Brent and EUR/USD (FRED), the fuels
+  weight (Eurostat) and the pump-price tax structure. The baseline reproduces the central forecast over
+  its 3 months; later months are a conditional path.
+- **Indirect effects (exploratory).** Energy → food, goods and services from local projections; both the
+  origin month and the outcome month t+h lie in {cfg['passthrough']['sample'][0][:4]}–{cfg['passthrough']['sample'][1][:4]}, so the 2021-23 surge is
+  never used. Regressor = observed energy price change, not an identified shock; shown with a range
+  from the coefficients' 90% bands.
 - **Limits.** Univariate forecast: no energy futures or flash estimate. Gains over the no-change
   forecast are concentrated in volatile periods and borderline significant.
 """)

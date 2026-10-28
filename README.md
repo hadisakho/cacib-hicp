@@ -7,7 +7,7 @@ An end-to-end pipeline on the **Eurostat API** (HICP, ECOICOP ver.2, index 2025 
   - for the euro area and its 21 member countries, with item weights and country weights;
   - cleaned, quality-reported and checked against the published numbers.
 - **Forecast:** headline YoY 3 months ahead, evaluated out-of-sample against naive benchmarks.
-- **Shock simulator:** price shocks on one or more components (main aggregates or COICOP divisions) and/or one or more countries, passed through exactly to euro area headline inflation. Indirect energy effects are included, and oil shocks are sized with market data.
+- **Shock simulator:** price shocks on one or more components (main aggregates or COICOP divisions) and/or one or more countries, passed through exactly to euro area headline inflation (direct effects). The scenario baseline is the central forecast. Indirect energy effects are an optional, exploratory extra, and oil shocks are sized with market data.
 - **Interactive dashboard** (Streamlit) and an analysis notebook.
 
 The euro area is the evolving composition (Eurostat geo `EA`: EA11-1999 … EA21-2026).
@@ -47,7 +47,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
 
 ```bash
 uv sync --locked                          # create .venv with pinned versions
-uv run pytest                             # 27 tests
+uv run pytest                             # 30 tests
 uv run python -m hicp.pipeline --refresh  # Eurostat download, cleaning, checks, backtest, forecast (~2 min)
 uv run streamlit run app.py               # dashboard at http://localhost:8501
 uv run jupyter lab notebooks/hicp_analysis.ipynb
@@ -129,7 +129,9 @@ The COICOP dimension is `coicop18`. Every raw response is cached with its downlo
 **Shocks.** `I_shock = I_base · (1 + s)` at country × component level, for one or more components (main aggregates or COICOP divisions) and one or more countries, re-aggregated exactly.
 - **Shapes:** step, ramp, temporary, or rate (a persistent addition to the component's inflation rate).
 - **Rule of thumb:** a permanent x% rise on basket share ω adds ≈ ω·x pp to headline YoY for 12 months, then drops out.
-- **Indirect effects** (main aggregates only): energy → food, goods and services, from local projections estimated on 1997–2020. The 2021–23 surge roughly doubles the estimates.
+- **Baseline.** For the 3 forecast months it equals the central forecast: every series is scaled by one common factor from each forecast month on, so the aggregate hits the forecast exactly and relative prices are unchanged. A scenario without shocks therefore returns the forecast. Later months (up to 24) continue each series' usual seasonal pattern and recent momentum. They are a conditional assumption, not a forecast, since accuracy is only tested at 1–3 months. Impacts (shocked − baseline) barely depend on this path.
+- **Direct effects (default)** are exact accounting: no estimated coefficient.
+- **Indirect effects (optional, exploratory; main aggregates, energy shocks only):** energy → food, goods and services, from local projections. Both the start month t and the outcome month t+h lie in 1997–2020, so the 2021–23 surge is never used, at any horizon. The regressor is the observed energy price change, not an identified shock. The dashboard shows the range obtained with each component's response at the ends of its 90% band.
 - **Oil shocks are sized from data:**
   - Brent and EUR/USD are 30-day averages from FRED;
   - the pump-price elasticity is crude cost / (crude + excise + margin) per litre, with excise and margin as stated assumptions;
