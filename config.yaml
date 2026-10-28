@@ -46,7 +46,7 @@ divisions:
   CP10: Education
   CP11: Restaurants & accommodation
   CP12: Insurance & financial services
-  CP13: Personal care, social protection & other
+  CP13: Personal care & other
 
 forecast:
   horizon: 3

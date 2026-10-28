@@ -31,9 +31,12 @@ pio.templates["hicp"] = go.layout.Template(layout=dict(
                tickfont=dict(color=INK_2), zeroline=False),
     yaxis=dict(gridcolor=GRID, gridwidth=1, linecolor=AXIS, tickfont=dict(color=INK_2),
                zerolinecolor=AXIS, zerolinewidth=1),
-    legend=dict(orientation="h", x=0, y=1.0, yanchor="bottom", font=dict(color=INK_2)),
+    # legend in the bottom margin, below the x axis: it can wrap onto several lines at any
+    # width without running into the title (charts without a legend shrink the margin)
+    legend=dict(orientation="h", x=0, xanchor="left", y=0, yanchor="bottom", yref="container",
+                entrywidth=0.5, entrywidthmode="fraction", font=dict(color=INK_2)),
     hoverlabel=dict(bgcolor="white", font=dict(color=INK)),
-    margin=dict(l=60, r=30, t=100, b=50), barcornerradius=4, bargap=0.25,
+    margin=dict(l=60, r=30, t=90, b=130), barcornerradius=4, bargap=0.25,
 ))
 pio.templates.default = "hicp"
 
@@ -44,6 +47,13 @@ OTHER = "OTHER"
 def component_colors(components: list[str]) -> dict[str, str]:
     """Fixed colour per code, in the given order; "OTHER" (and anything past 8) is grey."""
     return {c: MUTED if c == OTHER or i >= len(SERIES) else SERIES[i] for i, c in enumerate(components)}
+
+
+def _fit_legend(fig: go.Figure, columns: int = 2) -> go.Figure:
+    """Size the bottom margin to the legend (2 entries per row) so it never covers the axis."""
+    n = sum(1 for t in fig.data if t.showlegend is not False and t.name)
+    fig.update_layout(margin=dict(b=60 + 22 * -(-n // columns)))
+    return fig
 
 
 def keep_and_other(df: pd.DataFrame, keep: list[str]) -> pd.DataFrame:
@@ -84,7 +94,7 @@ def headline_chart(headline: pd.Series, core: pd.Series | None = None, since: st
     fig.update_layout(title=_title(f"Euro area inflation at {h.iloc[-1]:.1f}% in {last.strftime('%B %Y')}",
                                    "HICP, annual rate of change, %"),
                       hovermode="x unified", yaxis_ticksuffix="%")
-    return fig
+    return _fit_legend(fig)
 
 
 def contributions_chart(contrib: pd.DataFrame, headline: pd.Series, labels: dict[str, str],
@@ -103,7 +113,7 @@ def contributions_chart(contrib: pd.DataFrame, headline: pd.Series, labels: dict
                       title=_title(f"Largest contribution: {labels.get(top, top)}, "
                                    f"{c.iloc[-1][top]:.1f} pp of the {h.iloc[-1]:.1f}% headline rate",
                                    "Exact contributions to euro area HICP annual rate (chain-linked), pp"))
-    return fig
+    return _fit_legend(fig)
 
 
 def country_heatmap(data, months: int = 36) -> go.Figure:
@@ -117,7 +127,7 @@ def country_heatmap(data, months: int = 36) -> go.Figure:
         colorscale=[[0, DOWN], [0.5, NEUTRAL], [1, UP]],
         colorbar=dict(title="% YoY", ticksuffix="%", thickness=12),
         hovertemplate="%{y} · %{x|%b %Y}: %{z:.1f}%<extra></extra>"))
-    fig.update_layout(title=_title(f"{order[0]} has the highest rate, {order[-1]} the lowest",
+    fig.update_layout(margin=dict(b=50), title=_title(f"{order[0]} has the highest rate, {order[-1]} the lowest",
                                    "HICP annual rate by country, % (colour centred on the 2% target, capped at ±6 pp)"),
                       height=620, yaxis=dict(autorange="reversed", showgrid=False))
     return fig
@@ -138,7 +148,7 @@ def weights_chart(omega_year: pd.Series, labels: dict[str, str], year: int) -> g
                       title=_title(f"{big.index[0]}, {big.index[1]} and {big.index[2]} make up "
                                    f"{big.iloc[:3].sum():.0f}% of the euro area basket",
                                    f"Effective weights {year}: country weight × item weight, % of euro area HICP"))
-    return fig
+    return _fit_legend(fig)
 
 
 # ---- forecast --------------------------------------------------------------------
@@ -167,7 +177,7 @@ def fan_chart(headline: pd.Series, forecast: pd.Series, bands: pd.DataFrame,
                                    f"(80%: {forecast.iloc[-1] + bands['lo80'].iloc[-1]:.1f}–"
                                    f"{forecast.iloc[-1] + bands['hi80'].iloc[-1]:.1f}%)",
                                    "Euro area HICP, annual rate %; intervals from out-of-sample forecast errors"))
-    return fig
+    return _fit_legend(fig)
 
 
 def base_effects_chart(decomp: pd.DataFrame) -> go.Figure:
@@ -182,7 +192,7 @@ def base_effects_chart(decomp: pd.DataFrame) -> go.Figure:
         totals=dict(marker=dict(color=MUTED))))
     base = decomp.loc[decomp["kind"] == "base", "pp"].sum()
     new = decomp.loc[decomp["kind"] == "new", "pp"].sum()
-    fig.update_layout(showlegend=False, yaxis_ticksuffix="%",
+    fig.update_layout(showlegend=False, yaxis_ticksuffix="%", margin=dict(b=80),
                       title=_title(f"Base effects contribute {base:+.2f} pp, new price changes {new:+.2f} pp",
                                    "Monthly changes entering (new) and leaving (base) the 12-month window, pp"))
     return fig
@@ -198,7 +208,7 @@ def accuracy_chart(table: pd.DataFrame, highlight: str, benchmarks: list[str]) -
                            hovertemplate="%{y}<br>RMSE %{x:.3f} pp<br>vs no change: %{customdata[0]:.2f}"
                                          "<br>DM p-value %{customdata[1]:.3f}<extra></extra>"))
     row = table.set_index("model").loc[highlight]
-    fig.update_layout(height=60 * len(t) + 140, margin=dict(l=230), xaxis_range=[0, 1.18 * t["RMSE"].max()],
+    fig.update_layout(height=60 * len(t) + 140, margin=dict(l=230, b=50), xaxis_range=[0, 1.18 * t["RMSE"].max()],
                       title=_title(f"{highlight}: RMSE {row['RMSE']:.2f} pp, "
                                    f"{100 * (1 - row['rel. RMSE']):.0f}% below the no-change forecast",
                                    f"3-month-ahead headline YoY, out-of-sample, {int(row['n'])} forecasts; "
@@ -213,12 +223,12 @@ def track_record_chart(bt: pd.DataFrame, headline: pd.Series, models: list[str],
     fig.add_scatter(x=_ts(actual.index), y=actual.round(2), name="Published", line=dict(color=INK, width=2))
     for i, m in enumerate(models):
         d = bt[(bt["model"] == m) & (bt["h"] == h)].set_index("target")["forecast"].loc[since:]
-        fig.add_scatter(x=_ts(d.index), y=d.round(2), name=f"{m} (made {h}m earlier)",
+        fig.add_scatter(x=_ts(d.index), y=d.round(2), name=m,
                         line=dict(color=SERIES[i], width=2))
     fig.update_layout(hovermode="x unified", yaxis_ticksuffix="%",
                       title=_title("Track record: forecasts made three months ahead vs the outcome",
                                    "Euro area HICP annual rate, %"))
-    return fig
+    return _fit_legend(fig)
 
 
 # ---- pass-through and shocks -----------------------------------------------------
@@ -240,7 +250,7 @@ def passthrough_chart(lp: dict[str, pd.DataFrame], labels: dict[str, str], compo
                         hovertemplate="h=%{x} months: %{y:.3f}<extra></extra>")
         fig.add_hline(y=0, line=dict(color=AXIS, width=1), row=1, col=j)
     fig.update_xaxes(title_text="months after the energy price move")
-    fig.update_layout(height=420, title=_title(
+    fig.update_layout(height=420, margin=dict(b=70), title=_title(
         "Energy price moves pass through to other prices with a lag",
         "Cumulative % response to a 1% rise in the energy HICP (local projections, 90% HAC bands)"))
     return fig
@@ -270,12 +280,12 @@ def shock_chart(result, labels: dict[str, str], title: str) -> go.Figure:
                     marker=dict(color=colors[c], line=dict(color=SURFACE, width=1)))
     peak = d["total"].abs().idxmax()
     fig.update_layout(barmode="relative", hovermode="x unified", height=640,
-                      legend=dict(orientation="h", x=0, y=-0.14, yanchor="top"), margin=dict(b=130),
+
                       title=_title(f"{title}: peak impact {d['total'].loc[peak]:+.2f} pp in {peak.strftime('%b %Y')}",
                                    f"Direct {d['direct'].loc[peak]:+.2f} pp, indirect {d['indirect'].loc[peak]:+.2f} pp at the peak"))
     fig.update_yaxes(ticksuffix="%", title_text="Headline YoY", row=1, col=1)
     fig.update_yaxes(title_text="Impact, pp", row=2, col=1)
-    return fig
+    return _fit_legend(fig)
 
 
 def shock_country_chart(result, top: int = 12) -> go.Figure:
@@ -283,6 +293,6 @@ def shock_country_chart(result, top: int = 12) -> go.Figure:
     s = result.by_country.loc[peak].sort_values(key=np.abs, ascending=False).iloc[:top][::-1]
     fig = go.Figure(go.Bar(y=list(s.index), x=s.round(3), orientation="h", marker_color=SERIES[0],
                            hovertemplate="%{y}: %{x:.3f} pp<extra></extra>"))
-    fig.update_layout(height=420, title=_title(f"Where the impact comes from ({peak.strftime('%b %Y')})",
+    fig.update_layout(height=420, margin=dict(b=50), title=_title(f"Where the impact comes from ({peak.strftime('%b %Y')})",
                                                "Contribution of each country to the change in euro area headline YoY, pp"))
     return fig

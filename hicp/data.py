@@ -214,9 +214,10 @@ def load(cfg: Config) -> HICPData:
     if flags is not None:
         flags["time"] = pd.PeriodIndex(flags["time"], freq="M")
     qual = pd.read_csv(src / "quality.csv") if (src / "quality.csv").exists() else None
+    labels = {**meta["labels"], **cfg["components"], **cfg.get("divisions", {})}  # display names: config.yaml
     return HICPData(indices=indices, item_weights=iw, country_weights=cw, area=meta["area"],
                     countries=meta["countries"], components=meta["components"], divisions=meta.get("divisions", []),
-                    codes=meta["codes"], labels=meta["labels"], vintage=meta["vintage"],
+                    codes=meta["codes"], labels=labels, vintage=meta["vintage"],
                     source=meta.get("source", ""), flags=flags, quality=qual, cleaning=meta.get("cleaning", {}))
 
 
