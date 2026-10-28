@@ -1,12 +1,14 @@
 {
   "source": "Eurostat API",
-  "vintage": "2026-10-27T20:05:57+00:00",
+  "vintage": "2026-10-28T02:48:07+00:00",
   "labels": {
     "TOTAL": "Total",
     "CP01": "Food & non-alcoholic beverages",
     "CP02": "Alcohol, tobacco & narcotics",
     "CP03": "Clothing & footwear",
     "CP04": "Housing, water, electricity, gas & fuels",
+    "CP0451": "Electricity (ND)",
+    "CP0452": "Gas (ND)",
     "CP05": "Furnishings & household equipment",
     "CP06": "Health",
     "CP07": "Transport",
@@ -15,7 +17,7 @@
     "CP10": "Education",
     "CP11": "Restaurants & accommodation",
     "CP12": "Insurance & financial services",
-    "CP13": "Personal care, social protection & other",
+    "CP13": "Personal care & other",
     "FOOD_P": "Processed food, alcohol & tobacco",
     "FOOD_NP": "Unprocessed food",
     "IGD_NNRG": "Non-energy industrial goods",
@@ -75,13 +77,15 @@
     "headline": "TOTAL",
     "core": "TOT_X_NRG_FOOD",
     "hicpxt": "TOT_X_TBC",
-    "fuels": "FUEL"
+    "fuels": "FUEL",
+    "electricity": "CP0451",
+    "gas": "CP0452"
   },
   "cleaning": {
     "index exact duplicates dropped": 0,
     "index values removed (non-positive or non-finite)": 0,
     "item-weight exact duplicates dropped": 0,
     "country-weight exact duplicates dropped": 0,
-    "observations with a status flag": 46850
+    "observations with a status flag": 47450
   }
 }

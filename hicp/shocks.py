@@ -34,12 +34,14 @@ SHAPES = ("step", "ramp", "temporary", "rate")
 @dataclass
 class Shock:
     """component : COICOP code of one of the configured components (e.g. "NRG")
-    size       : % change in the price level (for shape="rate": pp added to the
-                 component's annual inflation rate)
+    size       : % change in the price level (for shape="rate": extra annual growth of
+                 the price level, %, compounded)
     start      : first affected month, e.g. "2026-10"
     countries  : list of geo codes; None = every euro area member
     shape      : step | ramp (reaches `size` after `ramp_months`) |
-                 temporary (lasts `duration` months) | rate (persistent inflation shock)
+                 temporary (lasts `duration` months) | rate (the level grows `size`% a
+                 year faster, compounded: about pi + size at low inflation, but 13.3%
+                 rather than 13% for pi = 10% and size = 3)
     """
     component: str
     size: float

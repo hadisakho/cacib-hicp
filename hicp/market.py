@@ -1,5 +1,5 @@
 """External market data used to size the oil-shock preset (FRED, no API key), plus the
-fuels share of energy from Eurostat's own weights."""
+shares of fuels, electricity and gas in energy from Eurostat's own weights."""
 
 from __future__ import annotations
 
@@ -39,6 +39,18 @@ def fuels_share_of_energy(data: HICPData, fallback: float) -> tuple[float, str]:
         if len(w):
             y = int(w.index[-1])
             return float(w.loc[y, fuels] / w.loc[y, energy]), f"Eurostat item weights {y} ({fuels} / {energy})"
+    return fallback, "config.yaml fallback"
+
+
+def share_of_energy(data: HICPData, codes: list[str], geo: str, fallback: float,
+                    energy: str = "NRG") -> tuple[float, str]:
+    """Weight of `codes` (e.g. electricity and gas) in the energy weight of `geo`, latest year."""
+    cols = [(geo, c) for c in (*codes, energy)]
+    if codes and all(c in data.item_weights.columns for c in cols):
+        w = data.item_weights[cols].dropna()
+        if len(w):
+            y = int(w.index[-1])
+            return float(w.loc[y, cols[:-1]].sum() / w.loc[y, cols[-1]]), f"Eurostat item weights {y}"
     return fallback, "config.yaml fallback"
 
 

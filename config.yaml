@@ -22,6 +22,8 @@ codes:
   core: TOT_X_NRG_FOOD            # overall index excluding energy, food, alcohol and tobacco
   hicpxt: TOT_X_TBC               # overall index excluding tobacco (inflation-linked swaps)
   fuels: FUEL                     # liquid fuels and fuels for personal transport (sizes the oil shock)
+  electricity: CP0451             # electricity  } size the gas & electricity preset
+  gas: CP0452                     # gas          } (their weight in each country's energy)
 
 # Two partitions of the headline (weights sum to 1000 in every country and year):
 # main aggregates - used for the forecast and for shocks with indirect energy effects
@@ -79,3 +81,4 @@ shocks:
   excise_eur_per_litre: 0.60
   margin_eur_per_litre: 0.25
   fuels_share_fallback: 0.447     # used only if the FUEL weight is unavailable
+  elec_gas_share_fallback: 0.50   # used only if the CP0451/CP0452 weights are unavailable

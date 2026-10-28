@@ -1,5 +1,6 @@
 """Forecast evaluation: accuracy by window, Diebold-Mariano, Hansen SPA (data snooping),
-prediction intervals with volatility scaling, real-time coverage."""
+prediction intervals with volatility scaling, real-time coverage, month-by-month replay of
+model-selection rules."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .forecast import NO_CHANGE
+from .forecast import NO_CHANGE, RECOMMENDED
 
 
 def dm_test(e_model, e_bench, h: int) -> tuple[float, float]:
@@ -104,3 +105,66 @@ def realtime_coverage(bt: pd.DataFrame, model: str, h: int, level: float = 0.8, 
         hits.append(k * past.quantile(lo_q) <= row["error"] <= k * past.quantile(hi_q))
     return {"model": model, "h": h, "level": level, "scaled": scale,
             "coverage": float(np.mean(hits)) if hits else np.nan, "n": len(hits)}
+
+
+# ---- model selection, replayed in real time ------------------------------------------
+
+EQUAL_WEIGHTS = "Equal weights, fixed (rule used)"
+
+
+def selection_replay(bt: pd.DataFrame, h: int, candidates: list[str], benchmark: str = NO_CHANGE,
+                     combination: str = RECOMMENDED, windows: dict[str, tuple] | None = None,
+                     min_errors: int = 24, recent: int = 36) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Replay written-down selection rules month by month. At origin t a rule only sees the
+    h-step errors whose target is already published (target <= t), so the choice of model is
+    itself out-of-sample, not only the forecasts. Rules start once `min_errors` errors are known.
+
+    Rules: equal weights on `candidates` (the combination, nothing estimated); inverse-MSE
+    weights; the candidate with the lowest past RMSE (all past errors, or the last `recent`);
+    the lowest past RMSE among every model in the backtest (benchmarks and combination too).
+    Returns (forecasts by rule, indexed by origin; summary: RMSE relative to the benchmark
+    by target window, DM p-value vs the benchmark, number of model switches)."""
+    df = bt[bt["h"] == h].dropna(subset=["actual"])
+    fc = df.pivot(index="origin", columns="model", values="forecast")
+    err = df.pivot(index="origin", columns="model", values="error")
+    actual = df.groupby("origin")["actual"].first()
+    everyone = list(err.columns)
+    pick_rules = {"Best past RMSE": (candidates, None),
+                  f"Best past RMSE, last {recent} months": (candidates, recent),
+                  "Best past RMSE, any model": (everyone, None)}
+    out, picks = {}, {name: {} for name in pick_rules}
+    for t in fc.index:
+        known = err.loc[: t - h]  # errors of forecasts whose target <= t
+        if len(known) < min_errors:
+            continue
+        mse = (known[candidates] ** 2).mean()
+        row = {EQUAL_WEIGHTS: fc.loc[t, combination],
+               "Inverse-MSE weights": (fc.loc[t, candidates] / mse).sum() / (1 / mse).sum()}
+        for name, (models, window) in pick_rules.items():
+            past = known[models] if window is None else known[models].iloc[-window:]
+            best = (past ** 2).mean().idxmin()
+            row[name], picks[name][t] = fc.loc[t, best], best
+        out[t] = row
+    forecasts = pd.DataFrame.from_dict(out, orient="index").rename_axis("origin")
+    errors = (-forecasts).add(actual.reindex(forecasts.index), axis=0)  # actual - forecast, as in the backtest
+    bench = err[benchmark].reindex(forecasts.index)
+    target = forecasts.index + h
+    rows = []
+    for rule in forecasts.columns:
+        row = {"rule": rule}
+        for name, (a, b) in (windows or {"full": (None, None)}).items():
+            m = np.ones(len(target), bool)
+            if a:
+                m &= target >= pd.Period(a, freq="M")
+            if b:
+                m &= target <= pd.Period(b, freq="M")
+            row[name] = np.sqrt(np.mean(errors.loc[m, rule] ** 2) / np.mean(bench[m] ** 2))
+        row["n"] = len(target)
+        row["DM p-value"] = dm_test(errors[rule], bench, h)[1]
+        chosen = pd.Series(picks.get(rule, {}), dtype=object)
+        row["model switches"] = int((chosen != chosen.shift()).sum() - 1) if len(chosen) else 0
+        rows.append(row)
+    summary = pd.DataFrame(rows).set_index("rule")
+    summary.attrs["first target"] = str(target[0])
+    return forecasts, summary
+

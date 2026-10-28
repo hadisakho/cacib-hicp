@@ -18,7 +18,9 @@ from hicp import plots
 from hicp.aggregation import contributions, effective_weights, yoy
 from hicp.config import load_config
 from hicp.data import load
+from hicp.evaluation import EQUAL_WEIGHTS
 from hicp.forecast import BENCHMARKS, NO_CHANGE, RECOMMENDED, base_effect_decomposition
+from hicp.market import share_of_energy
 from hicp.passthrough import ratio_bands
 from hicp.shocks import Shock, fuel_price_elasticity, simulate
 
@@ -57,6 +59,7 @@ def load_everything():
         "spa": pd.read_csv(out / "spa.csv"), "coverage": pd.read_csv(out / "coverage.csv"),
         "checks": pd.read_csv(out / "checks.csv"),
         "quality": pd.read_csv(out / "data_quality.csv") if (out / "data_quality.csv").exists() else None,
+        "selection": pd.read_csv(out / "selection.csv", index_col=0) if (out / "selection.csv").exists() else None,
         "lp": lp, "ratios": ratio_bands(lp, cfg.energy),  # central / low / high pass-through ratios
         "meta": read_json("metadata.json"), "market": read_json("market.json"),
         "contrib": {name: contributions(data.area_breakdown(codes), data.area_weights(codes))
@@ -153,20 +156,44 @@ with tab_fc:
     st.dataframe(table.set_index("model").round(3), width="stretch")
     with st.expander("Overfitting and interval checks"):
         spa = R["spa"].set_index("window")["spa_p_value"]
+        at5, at10 = [w for w, p in spa.items() if p < 0.05], [w for w, p in spa.items() if 0.05 <= p < 0.10]
+        verdict = (f"Rejected at 5% only in: {', '.join(at5)}" if at5 else "Not rejected at 5% in any window") + (
+            f"; at 10% also in: {', '.join(at10)}" if at10 else "")
         st.markdown(
-            "- **Data snooping (Hansen SPA test):** probability that *no* candidate beats the no-change forecast, "
-            "allowing for having searched over all of them: " + ", ".join(f"{w} p = {p:.2f}" for w, p in spa.items()) + ".\n"
+            "- **Data snooping (Hansen SPA test).** Null hypothesis: no candidate beats the no-change forecast, "
+            "allowing for having searched over all of them. p-values: "
+            + ", ".join(f"{w} {p:.3f}" for w, p in spa.items()) + f". {verdict}.\n"
             "- **Real-time 80% interval coverage** (target 0.80): "
             + ", ".join(f"h={int(r.h)} {'scaled' if r.scaled else 'plain'} {r.coverage:.2f}" for r in R["coverage"].itertuples())
             + f".\n- Every model is re-estimated each month on the previous {cfg['forecast']['window']} months only; "
             "the combination has no estimated weights.")
+        st.markdown("**How the model was chosen (read the comparison above as exploratory).** The four models and "
+                    "the decision to average them were settled after seeing the whole sample, test window included, "
+                    "so these scores are not an independent confirmation. The rule itself, equal weights on all "
+                    "candidates with nothing estimated, uses no outcome data. Below, written-down selection rules are "
+                    "replayed month by month, each seeing only the errors already published at the time "
+                    "(RMSE relative to no change; below 1 beats it):")
+        if R["selection"] is not None:
+            sel = R["selection"]
+            st.dataframe(sel.style.format(precision=3).format(precision=0, subset=["n", "model switches"])
+                         .apply(lambda r: ["font-weight: bold" if r.name == EQUAL_WEIGHTS else "" for _ in r], axis=1),
+                         width="stretch")
+        windows = set(acc["window"])
+        if {"validation", "test"} <= windows:
+            cands = acc[~acc["model"].isin(BENCHMARKS)]
+            val = cands[cands["window"] == "validation"].sort_values("RMSE").iloc[0]["model"]
+            test = acc[(acc["window"] == "test") & (acc["model"] == val)].iloc[0]["rel. RMSE"]
+            st.caption(f"Picking the lowest validation RMSE would choose {val}, which then scores {test:.2f} × no "
+                       "change on the test window. A fully independent test needs outcomes not yet published "
+                       "when the model was chosen.")
     show(plots.track_record_chart(R["bt"], head, [RECOMMENDED, NO_CHANGE]))
+
 
 # ---- Shock simulator ----------------------------------------------------------------
 with tab_shock:
     months = [str(T + k) for k in range(1, 13)]
-    presets = ["Oil price shock (fuels channel)", "German services +3% (wage settlement)",
-               "Gas & electricity spike in DE and IT", "Transport +10% in France (COICOP CP07)", "Custom"]
+    presets = ["Oil price shock (fuels channel)", "German services prices +3%",
+               "Gas & electricity +15% in DE and IT", "Transport +10% in France (COICOP CP07)", "Custom"]
     controls, results = st.columns([1, 2.6], gap="large")
     with controls:
         preset = st.selectbox("Scenario", presets)
@@ -190,8 +217,16 @@ with tab_shock:
             specs.append((cfg.energy, size, months[0], None, "ramp", 2, 6))
         elif preset == presets[1]:
             specs.append(("SERV", 3.0, months[0], ("DE",), "ramp", 6, 6))
-        elif preset == presets[2]:
-            specs.append((cfg.energy, 15.0, months[0], ("DE", "IT"), "temporary", 1, 6))
+            st.caption("A direct 3% rise in German services prices, phased in over 6 months (e.g. the price effect "
+                       "assumed after a wage settlement). No wage → price mechanism is estimated.")
+        elif preset == presets[2]:  # electricity & gas are part of energy: size the energy shock by their weight
+            move, codes, parts = 15.0, [data.codes[k] for k in ("electricity", "gas") if k in data.codes], []
+            for geo in ("DE", "IT"):
+                share, src = share_of_energy(data, codes, geo, cfg["shocks"]["elec_gas_share_fallback"], cfg.energy)
+                specs.append((cfg.energy, move * share, months[0], (geo,), "temporary", 1, 6))
+                parts.append(f"{geo} {move * share:+.1f}% (electricity & gas = {share:.0%} of energy)")
+            st.caption(f"Electricity & gas prices +{move:.0f}% for 6 months → energy HICP " + ", ".join(parts)
+                       + f"; {src}.")
         elif preset == presets[3]:
             breakdown = DIVISIONS
             specs.append(("CP07", 10.0, months[0], ("FR",), "step", 1, 6))
@@ -205,7 +240,8 @@ with tab_shock:
             size = st.number_input("Price level change (%)", value=10.0, step=1.0)
             shape = st.selectbox("Shape", ["step", "ramp", "temporary", "rate"],
                                  help="step: permanent level shift · ramp: phased in · temporary: reverses · "
-                                      "rate: adds to the component's annual inflation")
+                                      "rate: the price level grows x% a year faster, compounded, so the annual "
+                                      "rate becomes (1 + π)(1 + x) − 1, e.g. 2% → 5.06% or 10% → 13.3% for x = 3")
             start = st.selectbox("Start", months)
             ramp = st.number_input("Ramp length (months)", 1, 24, 6) if shape == "ramp" else 6
             duration = st.number_input("Duration (months)", 1, 24, 6) if shape == "temporary" else 6

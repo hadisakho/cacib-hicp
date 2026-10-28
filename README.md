@@ -24,7 +24,9 @@ The euro area is the evolving composition (Eurostat geo `EA`: EA11-1999 … EA21
 - a seasonal ARX on the aggregates;
 - a seasonal median on the aggregates.
 
-3-month RMSE relative to the no-change forecast (random walk on inflation); below 1 beats it:
+**Selection rule, written down:** equal weights on every candidate model, fixed in advance; no weight or model choice is estimated from outcomes.
+
+3-month RMSE relative to the no-change forecast (random walk on inflation); below 1 beats it. **Read these scores as exploratory:** each forecast uses only past data, but the four models and the decision to average them were settled after seeing the whole sample, test window included. Calling two windows "validation" and "test" does not make the test independent.
 
 | Window | Recommended | No change, RMSE (pp) |
 |---|---|---|
@@ -36,10 +38,26 @@ The euro area is the evolving composition (Eurostat geo `EA`: EA11-1999 … EA21
 
 **Robust to its settings.** The full-sample ratio stays between 0.765 and 0.774 across estimation windows of 60/96/120/180 months and seasonal windows of 4/6/8 years, and every setting beats the no-change forecast in every window.
 
+**Selection rules replayed month by month** (`outputs/selection.csv`). Each rule chooses at every forecast date using only the errors already published then, so the choice itself is out-of-sample. A rule starts once 24 errors are known (targets from May 2015 on).
+
+| Rule (3-month RMSE / no change) | Full | Validation | Test | Calm | Surge | Model switches |
+|---|---|---|---|---|---|---|
+| **Equal weights, fixed (rule used)** | **0.754** | 0.742 | 0.926 | 0.885 | 0.722 | 0 |
+| Inverse-MSE weights | 0.755 | 0.743 | 0.938 | 0.885 | 0.722 | 0 |
+| Best past RMSE | 0.794 | 0.772 | 1.090 | 0.884 | 0.754 | 1 |
+| Best past RMSE, last 36 months | 0.793 | 0.781 | 0.959 | 0.848 | 0.769 | 9 |
+| Best past RMSE, any model (incl. average, naive) | 0.812 | 0.800 | 0.986 | 1.007 | 0.767 | 6 |
+
+- Every rule that picks one model from its past errors does worse than fixed equal weights, and estimated weights add nothing (the "forecast combination puzzle").
+- No model leads in every window: ETS headline in the surge, the seasonal median on the test window, ETS bottom-up in calm years. That is when picking one model fails and averaging is the standard choice.
+- Picking the lowest validation RMSE would choose ETS headline (0.711 pp, just ahead of the average's 0.713), which then scores 1.09 × no change on the test window.
+
 **Honest reading:**
 - The gain over the no-change forecast is borderline significant: Diebold–Mariano p ≈ 0.05, Hansen SPA p ≈ 0.09 after allowing for the model search.
 - It is concentrated in volatile periods.
 - Volatility-scaled 80% intervals cover 76% of outcomes in real time.
+- The test window has only 24 overlapping 3-month errors (about 8 independent ones): too few to rank the models.
+- A fully independent confirmation needs outcomes not yet published when the model was chosen.
 
 ## Quick start
 
@@ -47,7 +65,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
 
 ```bash
 uv sync --locked                          # create .venv with pinned versions
-uv run pytest                             # 30 tests
+uv run pytest                             # 31 tests
 uv run python -m hicp.pipeline --refresh  # Eurostat download, cleaning, checks, backtest, forecast (~2 min)
 uv run streamlit run app.py               # dashboard at http://localhost:8501
 uv run jupyter lab notebooks/hicp_analysis.ipynb
@@ -80,7 +98,8 @@ hicp/
   aggregation.py     chain-linking, exact contributions, effective weights
   validation.py      checks that the engine reproduces the published numbers (both breakdowns)
   forecast.py        base-effect identity, models, recommended average, backtest
-  evaluation.py      accuracy by window, Diebold-Mariano, Hansen SPA, intervals, coverage
+  evaluation.py      accuracy by window, Diebold-Mariano, Hansen SPA, intervals, coverage,
+                     selection rules replayed month by month
   passthrough.py     local projections of the aggregates on energy prices
   shocks.py          shock shapes, exact re-aggregation, indirect effects, fuel-price elasticity
   market.py          Brent and EUR/USD (FRED) and the fuels share of energy (Eurostat weights)
@@ -124,10 +143,11 @@ The COICOP dimension is `coicop18`. Every raw response is cached with its downlo
 - Diebold–Mariano tests with the Harvey–Leybourne–Newbold correction (3-step errors overlap: 2 autocovariances).
 - Hansen SPA test for data snooping.
 - Real-time interval coverage.
-- The validation/test split of the original protocol is kept as two evaluation windows.
+- The validation/test split of the original protocol is kept as two evaluation windows. Because the model was chosen with the whole sample in view, they are descriptive, not an independent test.
+- Selection rules replayed month by month (`evaluation.selection_replay`): each rule only sees errors already published at the time.
 
 **Shocks.** `I_shock = I_base · (1 + s)` at country × component level, for one or more components (main aggregates or COICOP divisions) and one or more countries, re-aggregated exactly.
-- **Shapes:** step, ramp, temporary, or rate (a persistent addition to the component's inflation rate).
+- **Shapes:** step, ramp, temporary, or rate (the price level grows x% a year faster, compounded, so the component's annual rate becomes (1 + π)(1 + x) − 1: about π + x at low inflation, but 13.3% rather than 13% at π = 10%, x = 3).
 - **Rule of thumb:** a permanent x% rise on basket share ω adds ≈ ω·x pp to headline YoY for 12 months, then drops out.
 - **Baseline.** For the 3 forecast months it equals the central forecast: every series is scaled by one common factor from each forecast month on, so the aggregate hits the forecast exactly and relative prices are unchanged. A scenario without shocks therefore returns the forecast. Later months (up to 24) continue each series' usual seasonal pattern and recent momentum. They are a conditional assumption, not a forecast, since accuracy is only tested at 1–3 months. Impacts (shocked − baseline) barely depend on this path.
 - **Direct effects (default)** are exact accounting: no estimated coefficient.
@@ -136,12 +156,13 @@ The COICOP dimension is `coicop18`. Every raw response is cached with its downlo
   - Brent and EUR/USD are 30-day averages from FRED;
   - the pump-price elasticity is crude cost / (crude + excise + margin) per litre, with excise and margin as stated assumptions;
   - the fuels share of energy comes from Eurostat's weights (`FUEL` / `NRG`).
+- **Gas & electricity shocks are sized the same way:** a rise in their prices moves each country's energy HICP by that rise × their weight in energy (`CP0451` + `CP0452` / `NRG`, about 52% in DE and 53% in IT).
 
 ## Assumptions and limitations
 
 - The backtest uses the latest data vintage. HICP is rarely revised, but the ver.2 back series did not exist in real time.
 - The forecast is univariate: no energy futures and no flash estimate. This is the main avenue for improvement, since energy explains 1.7 pp of September 2026's 3.8%.
-- The model was chosen after looking at the whole sample. Applying the selection rule to validation years only would have picked "ETS bottom-up", which scores 0.97 × no change on the test window. Expect gains of a few percent in calm periods.
+- The model was chosen after looking at the whole sample, so the backtest comparison is exploratory. Picking the lowest validation RMSE would have chosen ETS headline, which scores 1.09 × no change on the test window; the replay above shows that equal weights beat every written-down selection rule. Independent confirmation needs outcomes published after the choice. Expect gains of a few percent in calm periods.
 - Shocks:
   - weights after the last published year are held fixed;
   - indirect pass-through is the same in every country and is not modelled for divisions;

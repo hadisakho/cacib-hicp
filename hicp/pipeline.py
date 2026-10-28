@@ -19,7 +19,7 @@ import pandas as pd
 
 from .config import load_config
 from .data import load_or_download
-from .evaluation import accuracy_by_window, interval_bands, realtime_coverage, spa_test
+from .evaluation import accuracy_by_window, interval_bands, realtime_coverage, selection_replay, spa_test
 from .forecast import BENCHMARKS, MEMBERS, NO_CHANGE, RECOMMENDED, ForecastSetup, backtest, final_forecast
 from .market import fuels_share_of_energy, market_snapshot
 from .passthrough import energy_passthrough
@@ -77,6 +77,15 @@ def main(argv: list[str] | None = None) -> None:
     table["target"] = table["target"].astype(str)
     table.to_csv(out / "forecast.csv", index=False)
     log("forecast: " + ", ".join(f"{t} {v:.2f}%" for t, v in zip(table["target"], table[RECOMMENDED])))
+
+    if (out / "backtest.csv").exists():  # model-selection rules replayed month by month
+        bt_all = pd.read_csv(out / "backtest.csv")
+        for c in ("origin", "target"):
+            bt_all[c] = pd.PeriodIndex(bt_all[c], freq="M")
+        sel = selection_replay(bt_all, setup.h, MEMBERS, windows=cfg.windows)[1]
+        sel.to_csv(out / "selection.csv")
+        log(f"selection replay (targets from {sel.attrs['first target']}): "
+            + ", ".join(f"{r} {v:.3f}" for r, v in sel[next(iter(cfg.windows))].items()))
 
     p = cfg["passthrough"]
     lp = energy_passthrough(data.area_components(), energy=cfg.energy, horizons=p["horizons"], lags=p["lags"],
