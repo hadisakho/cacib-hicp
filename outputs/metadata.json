@@ -1,6 +1,6 @@
 {
   "source": "Eurostat API",
-  "data_vintage": "2026-10-28T02:48:07+00:00",
+  "data_vintage": "2026-10-28T14:30:19+00:00",
   "last_month": "2026-09",
   "recommended": "4-model average (recommended)",
   "members": [
@@ -9,5 +9,5 @@
     "Seasonal ARX bottom-up",
     "Seasonal median bottom-up"
   ],
-  "run_at": "2026-10-28T02:49:33+00:00"
+  "run_at": "2026-10-28T14:32:02+00:00"
 }

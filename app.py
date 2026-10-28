@@ -98,7 +98,7 @@ fc_yoy = pd.Series(fc[RECOMMENDED].to_numpy(), index=fc_targets)
 largest_divisions = list(data.area_weights(data.divisions).iloc[-1].sort_values(ascending=False).index[:7]) \
     if data.divisions else []
 
-st.title("Euro area inflation")
+st.title("Euro area inflation (HICP) - Forecasting & Shock Simulation ")
 st.caption(f"HICP, euro area (evolving composition EA11-1999 … EA21-2026), ECOICOP ver.2, index 2025 = 100 · "
            f"data to {T.strftime('%B %Y')} · source: {R['meta'].get('source', 'Eurostat API')} · "
            f"updated {R['meta'].get('run_at', '')[:10]}")
@@ -148,13 +148,13 @@ with tab_fc:
         st.caption("The recommended model is the equal-weight average of the four models above it. Intervals: "
                    "empirical quantiles of past out-of-sample errors, widened when recent errors are larger than usual.")
 
-    st.subheader("Does it beat a naive forecast?")
+    st.subheader("Beats a naive forecast?")
     acc = R["accuracy"]
     window = st.segmented_control("Evaluation window", list(cfg.windows), default=next(iter(cfg.windows)))
     table = acc[acc["window"] == (window or next(iter(cfg.windows)))].drop(columns="window")
     show(plots.accuracy_chart(table, RECOMMENDED, BENCHMARKS))
     st.dataframe(table.set_index("model").round(3), width="stretch")
-    with st.expander("Overfitting and interval checks"):
+    with st.expander("Overfitting and forecast uncertainty"):
         spa = R["spa"].set_index("window")["spa_p_value"]
         at5, at10 = [w for w, p in spa.items() if p < 0.05], [w for w, p in spa.items() if 0.05 <= p < 0.10]
         verdict = (f"Rejected at 5% only in: {', '.join(at5)}" if at5 else "Not rejected at 5% in any window") + (
@@ -167,12 +167,7 @@ with tab_fc:
             + ", ".join(f"h={int(r.h)} {'scaled' if r.scaled else 'plain'} {r.coverage:.2f}" for r in R["coverage"].itertuples())
             + f".\n- Every model is re-estimated each month on the previous {cfg['forecast']['window']} months only; "
             "the combination has no estimated weights.")
-        st.markdown("**How the model was chosen (read the comparison above as exploratory).** The four models and "
-                    "the decision to average them were settled after seeing the whole sample, test window included, "
-                    "so these scores are not an independent confirmation. The rule itself, equal weights on all "
-                    "candidates with nothing estimated, uses no outcome data. Below, written-down selection rules are "
-                    "replayed month by month, each seeing only the errors already published at the time "
-                    "(RMSE relative to no change; below 1 beats it):")
+        st.markdown("**Model  choice.** The table compares alternative selection rules using only errors observed by each forecast origin:")
         if R["selection"] is not None:
             sel = R["selection"]
             st.dataframe(sel.style.format(precision=3).format(precision=0, subset=["n", "model switches"])
@@ -237,11 +232,12 @@ with tab_shock:
             names = {labels.get(k, k): k for k in breakdowns(cfg)[breakdown]}
             chosen = st.multiselect("Components (one or more)", list(names), default=list(names)[:1])
             countries = st.multiselect("Countries (empty = whole euro area)", data.countries)
-            size = st.number_input("Price level change (%)", value=10.0, step=1.0)
             shape = st.selectbox("Shape", ["step", "ramp", "temporary", "rate"],
                                  help="step: permanent level shift · ramp: phased in · temporary: reverses · "
                                       "rate: the price level grows x% a year faster, compounded, so the annual "
                                       "rate becomes (1 + π)(1 + x) − 1, e.g. 2% → 5.06% or 10% → 13.3% for x = 3")
+            size = st.number_input("Additional annual growth (%)" if shape == "rate" else "Price level change (%)",
+                                   value=10.0, step=1.0, key="shock_size")
             start = st.selectbox("Start", months)
             ramp = st.number_input("Ramp length (months)", 1, 24, 6) if shape == "ramp" else 6
             duration = st.number_input("Duration (months)", 1, 24, 6) if shape == "temporary" else 6
@@ -276,13 +272,7 @@ with tab_shock:
             table = pd.concat([res.yoy, res.delta.add_prefix("impact ")], axis=1)
             table.index = table.index.astype(str)
             st.download_button("Download scenario (CSV)", table.round(4).to_csv(), "scenario.csv", "text/csv")
-    st.caption(f"Baseline: equals the central forecast ({RECOMMENDED.split(' (')[0]}) for "
-               f"{fc_targets[0].strftime('%b')}–{fc_targets[-1].strftime('%b %Y')}, so a scenario without shocks "
-               "reproduces it exactly. After that, each series continues with its usual seasonal pattern and recent "
-               "momentum: a conditional assumption, not a forecast (forecast accuracy is only tested at 1–3 months). "
-               "Impacts (shocked − baseline) barely depend on the baseline. Direct effects are exact accounting; "
-               "indirect effects are optional and exploratory. Weights after the last published year held fixed; "
-               "no second-round (wage) effects.")
+    st.caption(f"The baseline matches the central forecast for the first three months. Beyond that, it continues each series seasonal pattern and recent momentum as a conditional path. Future weights are held fixed, and no wage feedback is modelled")
 
 # ---- Method & data ------------------------------------------------------------------
 with tab_method:

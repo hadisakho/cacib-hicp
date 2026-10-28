@@ -1,4 +1,4 @@
-"""Plotly charts shared by the notebook (and a future dashboard).
+"""Plotly charts shared by the notebook and dashboard).
 
 One colour per component everywhere (config order -> categorical slots), recessive
 grid, conclusion-style titles, units in every subtitle, no dual axes.

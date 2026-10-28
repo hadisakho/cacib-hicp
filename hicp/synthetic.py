@@ -1,7 +1,6 @@
 """Synthetic HICP-like data with the same structure as the Eurostat download.
 
-For running the tests and the notebook offline. The numbers are made up - never present
-them as euro area data. Prices are generated at country x COICOP-division level; the main
+For running the tests and the notebook offline. The numbers are made up not euro area data. Prices are generated at country x COICOP-division level; the main
 aggregates, countries and the euro area are then built with the real index rules
 (evolving composition, annual weights, December link), so both partitions of the headline
 hold exactly up to publication rounding.

@@ -24,9 +24,9 @@ The euro area is the evolving composition (Eurostat geo `EA`: EA11-1999 … EA21
 - a seasonal ARX on the aggregates;
 - a seasonal median on the aggregates.
 
-**Selection rule, written down:** equal weights on every candidate model, fixed in advance; no weight or model choice is estimated from outcomes.
-
-3-month RMSE relative to the no-change forecast (random walk on inflation); below 1 beats it. **Read these scores as exploratory:** each forecast uses only past data, but the four models and the decision to average them were settled after seeing the whole sample, test window included. Calling two windows "validation" and "test" does not make the test independent.
+**Selection :** The central forecast averages four models, each with a weight of 25%. The model set was chosen after
+reviewing the historical results, so the backtest comparisons are exploratory. On the common evaluation period, equal 
+weights perform about as well as inverse-MSE weighting.
 
 | Window | Recommended | No change, RMSE (pp) |
 |---|---|---|
@@ -36,7 +36,6 @@ The euro area is the evolving composition (Eurostat geo `EA`: EA11-1999 … EA21
 | Calm, 2013–2019 | 0.93 | 0.46 |
 | Surge, 2020–2023 | 0.72 | 1.42 |
 
-**Robust to its settings.** The full-sample ratio stays between 0.765 and 0.774 across estimation windows of 60/96/120/180 months and seasonal windows of 4/6/8 years, and every setting beats the no-change forecast in every window.
 
 **Selection rules replayed month by month** (`outputs/selection.csv`). Each rule chooses at every forecast date using only the errors already published then, so the choice itself is out-of-sample. A rule starts once 24 errors are known (targets from May 2015 on).
 
@@ -48,16 +47,18 @@ The euro area is the evolving composition (Eurostat geo `EA`: EA11-1999 … EA21
 | Best past RMSE, last 36 months | 0.793 | 0.781 | 0.959 | 0.848 | 0.769 | 9 |
 | Best past RMSE, any model (incl. average, naive) | 0.812 | 0.800 | 0.986 | 1.007 | 0.767 | 6 |
 
-- Every rule that picks one model from its past errors does worse than fixed equal weights, and estimated weights add nothing (the "forecast combination puzzle").
+- Every rule that picks one model from its past errors doesn't perform better than fixed equal weights. Ranking differs 
+in subperiods.
 - No model leads in every window: ETS headline in the surge, the seasonal median on the test window, ETS bottom-up in calm years. That is when picking one model fails and averaging is the standard choice.
 - Picking the lowest validation RMSE would choose ETS headline (0.711 pp, just ahead of the average's 0.713), which then scores 1.09 × no change on the test window.
 
-**Honest reading:**
-- The gain over the no-change forecast is borderline significant: Diebold–Mariano p ≈ 0.05, Hansen SPA p ≈ 0.09 after allowing for the model search.
+**Results and  limitations:**
+- The gain over the no-change forecast is borderline significant: Diebold–Mariano p ≈ 0.05, Hansen SPA p ≈ 0.09 after 
+allowing for the model search.
 - It is concentrated in volatile periods.
 - Volatility-scaled 80% intervals cover 76% of outcomes in real time.
-- The test window has only 24 overlapping 3-month errors (about 8 independent ones): too few to rank the models.
-- A fully independent confirmation needs outcomes not yet published when the model was chosen.
+- 24 overlapping three-month forecast errors, which limits the precision of model comparisons.
+- A fully independent confirmation would need outcomes not yet published.
 
 ## Quick start
 

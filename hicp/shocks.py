@@ -13,7 +13,7 @@ chain-linking (effective weights omega_c,i = country weight x item weight). Two 
 First-order intuition: a permanent step of x% on a basket share omega lifts headline
 YoY by ~omega*x for 12 months, then drops out (base effect).
 
-Assumptions to state: weights after the last published year are held fixed; indirect
+Assumptions: weights after the last published year are fixed; indirect
 pass-through is the same in every country; no second-round (wage) effects.
 """
 

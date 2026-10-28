@@ -8,9 +8,8 @@ For component j and horizon h = 0..H (Jorda, 2005):
 with x_t the monthly log change of the energy HICP. Standard errors are HAC (Newey-West,
 h+1 lags) because the overlapping left-hand side makes u_t+h autocorrelated.
 
-Caveat (say it in the deck): x_t is the observed energy price change, not an identified
-shock. Instrumenting it with an oil-supply shock series (e.g. Kanzig 2021) is the
-rigorous upgrade (LP-IV).
+The regressor is the observed energy-price change. The estimates describe historical associations
+rather than identified causal effects.
 """
 
 from __future__ import annotations

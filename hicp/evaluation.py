@@ -92,8 +92,7 @@ def interval_bands(bt: pd.DataFrame, model: str, levels=(0.5, 0.8, 0.9), scale: 
 
 def realtime_coverage(bt: pd.DataFrame, model: str, h: int, level: float = 0.8, scale: bool = True,
                       min_obs: int = 36) -> dict:
-    """Honest interval check: at each origin, build the interval from errors already
-    observed (targets <= origin) and record whether the outcome falls inside."""
+    """Evaluate interval coverage using errors available at each forecast origin."""
     df = bt[(bt["model"] == model) & (bt["h"] == h)].sort_values("origin")
     lo_q, hi_q = (1 - level) / 2, 1 - (1 - level) / 2
     hits = []

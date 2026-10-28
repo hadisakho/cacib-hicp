@@ -1,6 +1,6 @@
-"""Data cleaning and quality report for the Eurostat extractions.
+"""Data cleaning and quality report for Eurostat extractions.
 
-Rules (nothing is interpolated or invented):
+Rules :
   - exact duplicate observations are dropped; conflicting duplicates (same key, different
     value) stop the pipeline;
   - non-finite or non-positive index values are removed (an index cannot be <= 0);

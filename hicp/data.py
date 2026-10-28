@@ -87,7 +87,7 @@ def _filters(dims: dict, wanted: dict) -> dict:
 
 
 def _single_valued(df: pd.DataFrame, keep: list[str], dataset: str) -> pd.DataFrame:
-    """Fail loudly if a dimension we do not filter on still has several values."""
+    """Fail if a dimension we do not filter on still has several values."""
     for dim in df.columns:
         if dim in keep or dim in ("value", "flag"):
             continue
