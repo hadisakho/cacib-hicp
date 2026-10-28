@@ -66,7 +66,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
 
 ```bash
 uv sync --locked                          # create .venv with pinned versions
-uv run pytest                             # 31 tests
+uv run pytest                             # 33 tests
 uv run python -m hicp.pipeline --refresh  # Eurostat download, cleaning, checks, backtest, forecast (~2 min)
 uv run streamlit run app.py               # dashboard at http://localhost:8501
 uv run jupyter lab notebooks/hicp_analysis.ipynb
